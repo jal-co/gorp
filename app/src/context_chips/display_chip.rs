@@ -1782,7 +1782,7 @@ impl ActionButtonTheme for EnterAgentViewButton {
 }
 
 fn shell_single_quote(value: &str) -> String {
-    format!("'{}'", value.replace("'", "'\\'''"))
+    format!("'{}'", value.replace("'", "'\\''"))
 }
 
 fn format_change_directory_command(dir_name: &str) -> String {
