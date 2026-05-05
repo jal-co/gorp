@@ -184,6 +184,22 @@ mod tests {
     use super::*;
 
     #[test]
+    fn test_git_branch_on_click_value_round_trips_through_encode_decode() {
+        let values = [
+            GitBranchOnClickValue::new("feature-a".to_string()),
+            GitBranchOnClickValue::linked_worktree(
+                "feature-b".to_string(),
+                Some("/repo/feature-b".to_string()),
+            ),
+            GitBranchOnClickValue::linked_worktree("feature-c".to_string(), None),
+        ];
+
+        for value in values {
+            assert_eq!(GitBranchOnClickValue::decode(&value.encode()), value);
+        }
+    }
+
+    #[test]
     fn test_git_branch_on_click_values_resolve_linked_worktree_paths() {
         let values = Some(vec![
             "  feature-a".to_string(),

@@ -1789,8 +1789,8 @@ fn format_change_directory_command(dir_name: &str) -> String {
     format!("cd {}", shell_single_quote(dir_name))
 }
 
-pub fn format_git_branch_command(value: &str) -> String {
-    let branch = GitBranchOnClickValue::decode(value);
+pub fn format_git_branch_command(encoded_git_branch_on_click_value: &str) -> String {
+    let branch = GitBranchOnClickValue::decode(encoded_git_branch_on_click_value);
     if let Some(worktree_path) = branch.worktree_path {
         return format_change_directory_command(&worktree_path);
     }
@@ -1805,7 +1805,7 @@ pub fn format_git_branch_command(value: &str) -> String {
         );
     }
 
-    format!("git checkout {}", branch.branch_name)
+    format!("git checkout {}", shell_single_quote(&branch.branch_name))
 }
 
 pub(crate) fn chip_container(

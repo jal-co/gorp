@@ -43,6 +43,16 @@ fn test_github_pr_chip_display_value_falls_back_to_raw_value() {
 }
 
 #[test]
+fn test_format_git_branch_command_checks_out_normal_branch() {
+    let value = GitBranchOnClickValue::new("feature/alice's-work".to_string()).encode();
+
+    assert_eq!(
+        format_git_branch_command(&value),
+        "git checkout 'feature/alice'\\''s-work'"
+    );
+}
+
+#[test]
 fn test_format_git_branch_command_changes_to_linked_worktree_path() {
     let value = GitBranchOnClickValue {
         branch_name: "feature-a".to_string(),
