@@ -358,6 +358,15 @@ impl RunAgentsCardView {
                     action_model.execute_run_agents(&action_id, request, action_ctx);
                 });
             }
+            BlocklistAIActionEvent::ActionBlockedOnUserConfirmation(action_id)
+                if action_id == &action_id_for_action_events =>
+            {
+                // Normal case: streaming is complete and the action is
+                // ready for user confirmation. Re-render so the card
+                // transitions from the "Configuring agents..." placeholder
+                // to the full confirmation UI.
+                ctx.notify();
+            }
             _ => {}
         });
 
