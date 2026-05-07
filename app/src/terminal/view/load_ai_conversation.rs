@@ -28,6 +28,14 @@ use crate::ai::agent::api::convert_conversation::proto_timestamp_to_local_dateti
 
 use super::DEFAULT_AI_BLOCK_HEIGHT;
 
+/// A RunShellCommandResult paired with the tool call message timestamp (start)
+/// and the tool call result message timestamp (end).
+struct RunShellCommandResultWithTimestamps {
+    result: api::RunShellCommandResult,
+    start_ts: Option<DateTime<Local>>,
+    completed_ts: Option<DateTime<Local>>,
+}
+
 use crate::ai::agent::task::helper::MessageExt;
 use crate::ai::agent::AIAgentActionResultType;
 use crate::ai::agent::CreateDocumentsRequest;
@@ -876,17 +884,14 @@ impl TerminalView {
         }
     }
 
-    /// Helper function to find a tool call result from a conversation's tasks given a message ID.
+    /// Helper function to find a run shell command result tool call result from a conversation's tasks
+    /// given the message ID of the run shell command tool call.
     /// Returns the RunShellCommandResult along with the tool call message timestamp (start)
     /// and the tool call result message timestamp (end).
     fn find_run_shell_command_result_for_message(
         conversation: &AIConversation,
         message_id: &MessageId,
-    ) -> Option<(
-        api::RunShellCommandResult,
-        Option<DateTime<Local>>,
-        Option<DateTime<Local>>,
-    )> {
+    ) -> Option<RunShellCommandResultWithTimestamps> {
         // Find the tool call message and extract its timestamp (command start time)
         // and the tool_call_id.
         let (tool_call_id, tool_call_ts) = conversation
@@ -923,7 +928,11 @@ impl TerminalView {
                     })
             });
 
-        Some((result, tool_call_ts, result_ts))
+        Some(RunShellCommandResultWithTimestamps {
+            result,
+            start_ts: tool_call_ts,
+            completed_ts: result_ts,
+        })
     }
 
     /// Process code diffs from AI output messages and apply them to the AI block for rendering
@@ -971,7 +980,12 @@ impl TerminalView {
                                     )
                                 })
                         });
-                    if let Some((cmd_result, start_ts, completed_ts)) = cmd_result_with_timestamps {
+                    if let Some(RunShellCommandResultWithTimestamps {
+                        result: cmd_result,
+                        start_ts,
+                        completed_ts,
+                    }) = cmd_result_with_timestamps
+                    {
                         // Check if the command finished successfully
                         if let Some(api::run_shell_command_result::Result::CommandFinished(
                             api::ShellCommandFinished {
