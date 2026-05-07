@@ -301,6 +301,20 @@ pub fn populate_model_picker<A: OrchestrationControlAction, V: View>(
     populate_model_picker_for_harness(dropdown, initial_model_id, "", ctx);
 }
 
+/// Returns whether the given LLM matches the harness filter.
+/// Claude → Anthropic only, Codex → OpenAI only, Oz/empty → all.
+fn matches_harness_filter(harness: Option<Harness>, provider: &LLMProvider) -> bool {
+    match harness {
+        Some(Harness::Claude) => matches!(provider, LLMProvider::Anthropic),
+        Some(Harness::Codex) => matches!(provider, LLMProvider::OpenAI),
+        Some(Harness::Oz)
+        | Some(Harness::Gemini)
+        | Some(Harness::OpenCode)
+        | Some(Harness::Unknown)
+        | None => true,
+    }
+}
+
 /// Populates the model picker, filtering choices by harness.
 /// Claude → Anthropic models only, Codex → OpenAI models only,
 /// Oz/empty → all models.
@@ -318,15 +332,7 @@ pub fn populate_model_picker_for_harness<A: OrchestrationControlAction, V: View>
         let harness = Harness::parse_orchestration_harness(&harness_type);
         let choices: Vec<_> = all_choices
             .into_iter()
-            .filter(|llm| match harness {
-                Some(Harness::Claude) => matches!(llm.provider, LLMProvider::Anthropic),
-                Some(Harness::Codex) => matches!(llm.provider, LLMProvider::OpenAI),
-                Some(Harness::Oz)
-                | Some(Harness::Gemini)
-                | Some(Harness::OpenCode)
-                | Some(Harness::Unknown)
-                | None => true,
-            })
+            .filter(|llm| matches_harness_filter(harness, &llm.provider))
             .collect();
         let selected_display_name = choices
             .iter()
@@ -360,15 +366,7 @@ pub fn is_model_in_filtered_choices<V: View>(
     let harness = Harness::parse_orchestration_harness(harness_type);
     llm_prefs
         .get_base_llm_choices_for_agent_mode()
-        .filter(|llm| match harness {
-            Some(Harness::Claude) => matches!(llm.provider, LLMProvider::Anthropic),
-            Some(Harness::Codex) => matches!(llm.provider, LLMProvider::OpenAI),
-            Some(Harness::Oz)
-            | Some(Harness::Gemini)
-            | Some(Harness::OpenCode)
-            | Some(Harness::Unknown)
-            | None => true,
-        })
+        .filter(|llm| matches_harness_filter(harness, &llm.provider))
         .any(|llm| llm.id.to_string() == model_id)
 }
 
@@ -382,15 +380,7 @@ pub fn first_filtered_model_id<V: View>(
     let harness = Harness::parse_orchestration_harness(harness_type);
     llm_prefs
         .get_base_llm_choices_for_agent_mode()
-        .find(|llm| match harness {
-            Some(Harness::Claude) => matches!(llm.provider, LLMProvider::Anthropic),
-            Some(Harness::Codex) => matches!(llm.provider, LLMProvider::OpenAI),
-            Some(Harness::Oz)
-            | Some(Harness::Gemini)
-            | Some(Harness::OpenCode)
-            | Some(Harness::Unknown)
-            | None => true,
-        })
+        .find(|llm| matches_harness_filter(harness, &llm.provider))
         .map(|llm| llm.id.to_string())
 }
 

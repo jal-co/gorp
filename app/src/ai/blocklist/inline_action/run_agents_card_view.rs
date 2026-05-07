@@ -376,6 +376,20 @@ impl RunAgentsCardView {
         ctx.subscribe_to_model(&LLMPreferences::handle(ctx), |me, _, event, ctx| {
             if let LLMPreferencesEvent::UpdatedAvailableLLMs = event {
                 if let Some(handle) = &me.handles.pickers.model_picker {
+                    // Re-validate model_id against the updated choices.
+                    // This handles the case where harness was changed while
+                    // models hadn't loaded yet.
+                    if !oc::is_model_in_filtered_choices(
+                        &me.state.orch.model_id,
+                        &me.state.orch.harness_type,
+                        ctx,
+                    ) {
+                        if let Some(first_id) =
+                            oc::first_filtered_model_id(&me.state.orch.harness_type, ctx)
+                        {
+                            me.state.orch.model_id = first_id;
+                        }
+                    }
                     oc::populate_model_picker_for_harness(
                         handle,
                         &me.state.orch.model_id,
@@ -635,27 +649,26 @@ impl View for RunAgentsCardView {
             return render_spawning_card(&snapshot, appearance, app);
         }
 
-        // Still streaming: show "Configuring agents..." placeholder until
-        // the action reaches Blocked status (i.e., streaming is complete
-        // and the action is queued for user confirmation). This prevents
-        // showing an interactive confirmation card backed by a partial
-        // request that is still being streamed.
-        if !matches!(status, Some(AIActionStatus::Blocked)) {
-            return render_status_only_card(
-                "Configuring agents\u{2026}".to_string(),
-                appearance,
-                StatusKind::Spawning,
-                app,
-            );
-        }
-
         // Restored-from-history: dispatch state is lost, render as
-        // Cancelled.
+        // Cancelled. Must be checked before the streaming gate below,
+        // because restored blocks have no pending action status.
         if self.block_model.is_restored() {
             return render_status_only_card(
                 "Spawn agents cancelled".to_string(),
                 appearance,
                 StatusKind::Cancelled,
+                app,
+            );
+        }
+
+        // Still streaming: show "Configuring agents..." placeholder until
+        // the action reaches Blocked status (i.e., streaming is complete
+        // and the action is queued for user confirmation).
+        if !matches!(status, Some(AIActionStatus::Blocked)) {
+            return render_status_only_card(
+                "Configuring agents\u{2026}".to_string(),
+                appearance,
+                StatusKind::Spawning,
                 app,
             );
         }
@@ -729,8 +742,9 @@ impl TypedActionView for RunAgentsCardView {
                         harness_type,
                         ctx,
                     ) {
-                        self.state.orch.model_id =
-                            oc::first_filtered_model_id(harness_type, ctx).unwrap_or_default();
+                        if let Some(first_id) = oc::first_filtered_model_id(harness_type, ctx) {
+                            self.state.orch.model_id = first_id;
+                        }
                         oc::populate_model_picker_for_harness(
                             handle,
                             &self.state.orch.model_id,
