@@ -448,6 +448,15 @@ impl GitBranch {
     fn command(&self) -> String {
         format_git_branch_command(&self.0)
     }
+
+    fn icon_for_menu(&self) -> Icon {
+        let branch = GitBranchOnClickValue::decode(&self.0);
+        if branch.is_linked_worktree {
+            Icon::Dataflow02
+        } else {
+            Icon::GitBranch
+        }
+    }
 }
 
 impl GenericMenuItem for GitBranch {
@@ -460,7 +469,7 @@ impl GenericMenuItem for GitBranch {
     }
 
     fn icon(&self, _app: &AppContext) -> Option<Icon> {
-        Some(Icon::GitBranch)
+        Some(self.icon_for_menu())
     }
 
     fn action_data(&self) -> String {
