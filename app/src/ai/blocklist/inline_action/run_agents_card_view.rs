@@ -626,11 +626,12 @@ impl View for RunAgentsCardView {
             return render_spawning_card(&snapshot, appearance, app);
         }
 
-        // Still streaming: show a "Configuring agents..." placeholder
-        // until agent_run_configs are populated.
-        if self.state.agent_run_configs.is_empty()
-            && !matches!(status, Some(AIActionStatus::Blocked))
-        {
+        // Still streaming: show "Configuring agents..." placeholder until
+        // the action reaches Blocked status (i.e., streaming is complete
+        // and the action is queued for user confirmation). This prevents
+        // showing an interactive confirmation card backed by a partial
+        // request that is still being streamed.
+        if !matches!(status, Some(AIActionStatus::Blocked)) {
             return render_status_only_card(
                 "Configuring agents\u{2026}".to_string(),
                 appearance,
