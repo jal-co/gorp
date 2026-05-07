@@ -864,6 +864,10 @@ pub enum FeatureFlag {
     /// replace the default "Warping..." spinner when the Warp agent or an Oz
     /// cloud agent is in the generic in-progress state.
     CustomWarpingVerbs,
+    /// Gates the driver behavior that writes GitHub credentials to disk
+    /// (`~/.git-credentials`, `~/.config/gh/hosts.yaml`) and runs the
+    /// background refresh loop that keeps them fresh during a task run.
+    GitCredentialRefresh,
 }
 
 static FLAG_STATES: [AtomicBool; cardinality::<FeatureFlag>()] =
@@ -940,13 +944,13 @@ pub const DOGFOOD_FLAGS: &[FeatureFlag] = &[
     FeatureFlag::LocalDockerSandbox,
     FeatureFlag::VerticalTabsSummaryMode,
     FeatureFlag::CloudModeSetupV2,
-    FeatureFlag::ConfigurableContextWindow,
     #[cfg(not(windows))]
     FeatureFlag::SshRemoteServer,
     FeatureFlag::CloudModeInputV2,
     FeatureFlag::HandoffLocalCloud,
     FeatureFlag::DragTabsToWindows,
     FeatureFlag::CustomWarpingVerbs,
+    FeatureFlag::GitCredentialRefresh,
 ];
 
 /// Features enabled for feature preview build users (e.g.: Friends of Warp).
@@ -1206,5 +1210,5 @@ impl From<TriState> for Option<bool> {
 }
 
 #[cfg(test)]
-#[path = "features_test.rs"]
+#[path = "features_tests.rs"]
 mod tests;
