@@ -898,9 +898,10 @@ impl TerminalView {
                     .iter()
                     .find(|msg| msg.id == **message_id)?;
                 let tool_call = msg.tool_call()?;
-                let ts = msg.timestamp.as_ref().map(|ts| {
-                    proto_timestamp_to_local_datetime(ts.seconds, ts.nanos)
-                });
+                let ts = msg
+                    .timestamp
+                    .as_ref()
+                    .map(|ts| proto_timestamp_to_local_datetime(ts.seconds, ts.nanos));
                 Some((tool_call.tool_call_id.clone(), ts))
             })?;
 
@@ -916,9 +917,9 @@ impl TerminalView {
                     .iter()
                     .find(|msg| msg.id == result_message_id)
                     .and_then(|msg| {
-                        msg.timestamp.as_ref().map(|ts| {
-                            proto_timestamp_to_local_datetime(ts.seconds, ts.nanos)
-                        })
+                        msg.timestamp
+                            .as_ref()
+                            .map(|ts| proto_timestamp_to_local_datetime(ts.seconds, ts.nanos))
                     })
             });
 
@@ -970,8 +971,7 @@ impl TerminalView {
                                     )
                                 })
                         });
-                    if let Some((cmd_result, start_ts, completed_ts)) = cmd_result_with_timestamps
-                    {
+                    if let Some((cmd_result, start_ts, completed_ts)) = cmd_result_with_timestamps {
                         // Check if the command finished successfully
                         if let Some(api::run_shell_command_result::Result::CommandFinished(
                             api::ShellCommandFinished {
