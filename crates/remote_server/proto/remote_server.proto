@@ -53,6 +53,7 @@ message ServerMessage {
     BufferUpdatedPush buffer_updated = 15;
     SaveBufferResponse save_buffer_response = 16;
     ResolveConflictResponse resolve_conflict_response = 17;
+    BufferConflictDetected buffer_conflict_detected = 18;
   }
 }
 
@@ -440,3 +441,10 @@ message ResolveConflictResponse {
 }
 
 message ResolveConflictSuccess {}
+
+// Server → client push: the file changed on disk while the client had
+// unsaved edits. The server does NOT apply the disk change to its buffer;
+// the client should show a conflict resolution banner.
+message BufferConflictDetected {
+  string path = 1;
+}
