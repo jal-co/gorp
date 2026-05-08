@@ -20,6 +20,25 @@ Create a one-time launch modal — the dark-background design used for feature a
 - [ ] Workspace wiring in `app/src/workspace/view.rs` and `app/src/workspace/mod.rs`
 - [ ] Debug actions in `app/src/workspace/action.rs`
 - [ ] Hero image at `app/assets/async/png/onboarding/<name>_launch_banner.png`
+- [ ] Any custom icons added to `crates/warp_core/src/ui/icons.rs` + SVG in `app/assets/bundled/svg/`
+
+---
+
+## Step 0 – Custom icons (if needed)
+
+If the modal uses icons not yet in the `Icon` enum, add them before writing the view.
+
+In `crates/warp_core/src/ui/icons.rs`:
+
+```rust
+// Add to enum
+YourIconName,
+
+// Add to From<Icon> for &'static str match
+Icon::YourIconName => "bundled/svg/your-icon-name.svg",
+```
+
+Drop the SVG file at `app/assets/bundled/svg/your-icon-name.svg`. Use the same 24×24 viewBox format as existing icons.
 
 ---
 
