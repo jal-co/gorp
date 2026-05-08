@@ -2651,6 +2651,7 @@ impl BlockList {
     /// If `start_ts` and/or `completed_ts` are provided, they override the timestamps that
     /// `start()` / `finish()` would otherwise set to `Local::now()`. This ensures restored
     /// blocks carry the original execution timestamps from the conversation transcript.
+    #[allow(clippy::too_many_arguments)]
     pub fn create_restored_command_block(
         &mut self,
         command: &str,
