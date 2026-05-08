@@ -181,6 +181,8 @@ pub struct ConversationDetailsData {
     title: String,
     /// Information about the creator.
     creator: Option<CreatorInfo>,
+    /// Principal the cloud run executed as.
+    executor: Option<CreatorInfo>,
     /// When the conversation was created.
     created_at: Option<DateTime<Local>>,
     credits: Option<CreditsInfo>,
@@ -297,6 +299,7 @@ impl ConversationDetailsData {
                 .title()
                 .unwrap_or_else(|| "Conversation".to_string()),
             creator,
+            executor: None,
             created_at,
             credits: Some(CreditsInfo::LocalConversation(conversation.credits_spent())),
             run_time,
@@ -365,6 +368,9 @@ impl ConversationDetailsData {
             creator: task
                 .creator_display_name()
                 .map(|name| CreatorInfo::new(name, None)),
+            executor: task
+                .executor_display_name()
+                .map(|name| CreatorInfo::new(name, None)),
             source_prompt: Some(task.prompt.clone()),
             copy_link_url,
             skill_spec,
@@ -383,6 +389,12 @@ impl ConversationDetailsData {
             .creator
             .name
             .clone()
+            .map(|name| CreatorInfo::new(name, None));
+        let executor = entry
+            .display
+            .executor
+            .as_ref()
+            .and_then(|executor| executor.name.clone())
             .map(|name| CreatorInfo::new(name, None));
         let created_at = Some(entry.display.created_at.with_timezone(&Local));
         let source_prompt = entry.display.initial_query.clone();
@@ -423,6 +435,7 @@ impl ConversationDetailsData {
                 },
                 title: entry.display.title.clone(),
                 creator,
+                executor,
                 created_at,
                 credits,
                 run_time: task.and_then(AmbientAgentTask::run_time),
@@ -448,6 +461,7 @@ impl ConversationDetailsData {
             },
             title: entry.display.title.clone(),
             creator,
+            executor: None,
             created_at,
             credits: entry
                 .display
@@ -477,6 +491,7 @@ impl ConversationDetailsData {
             },
             title: "Cloud agent run".to_string(),
             creator: None,
+            executor: None,
             created_at: None,
             credits: None,
             run_time: None,
@@ -517,6 +532,7 @@ impl ConversationDetailsData {
             },
             title,
             creator: creator_name.map(|name| CreatorInfo::new(name, None)),
+            executor: None,
             created_at: Some(created_at),
             credits: credits_used.map(CreditsInfo::LocalConversation),
             run_time: None,
@@ -963,6 +979,53 @@ impl ConversationDetailsPanel {
                         .finish(),
                 )
                 .with_child(Expanded::new(1., created_text).finish())
+                .finish(),
+        )
+    }
+
+    fn render_executor_section(&self, appearance: &Appearance) -> Option<Box<dyn Element>> {
+        let executor = self.data.executor.as_ref()?;
+        let theme = appearance.theme();
+        let ui_font_size = appearance.ui_font_size();
+        let small_font_size = ui_font_size - 2.;
+
+        let avatar = Avatar::new(
+            AvatarContent::DisplayName(executor.display_name.clone()),
+            warpui::ui_components::components::UiComponentStyles {
+                width: Some(20.),
+                height: Some(20.),
+                border_radius: Some(warpui::elements::CornerRadius::with_all(
+                    warpui::elements::Radius::Percentage(50.),
+                )),
+                background: Some(blended_colors::accent(theme).into()),
+                font_color: Some(ColorU::black()),
+                font_family_id: Some(appearance.ui_font_family()),
+                font_weight: Some(warpui::fonts::Weight::Bold),
+                font_size: Some(small_font_size),
+                ..Default::default()
+            },
+        )
+        .build()
+        .finish();
+
+        let executor_text = Text::new(
+            format!("Executed as {}", executor.display_name),
+            appearance.ui_font_family(),
+            ui_font_size,
+        )
+        .with_color(blended_colors::text_sub(theme, theme.surface_1()))
+        .with_selectable(true)
+        .finish();
+
+        Some(
+            Flex::row()
+                .with_cross_axis_alignment(CrossAxisAlignment::Center)
+                .with_child(
+                    Container::new(avatar)
+                        .with_margin_right(LABEL_VALUE_GAP)
+                        .finish(),
+                )
+                .with_child(Expanded::new(1., executor_text).finish())
                 .finish(),
         )
     }
@@ -1731,6 +1794,15 @@ impl View for ConversationDetailsPanel {
             content.add_child(
                 Container::new(skill_section)
                     .with_margin_bottom(HEADER_SPACING)
+                    .finish(),
+            );
+        }
+
+        // Executor section
+        if let Some(executor_section) = self.render_executor_section(appearance) {
+            content.add_child(
+                Container::new(executor_section)
+                    .with_margin_bottom(FIELD_SPACING)
                     .finish(),
             );
         }

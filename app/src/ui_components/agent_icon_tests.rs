@@ -401,6 +401,7 @@ fn non_ambient_entry_uses_display_harness() {
             last_updated: Utc::now(),
             status: AgentRunDisplayStatus::ConversationSucceeded,
             creator: AgentConversationCreator::default(),
+            executor: None,
             request_usage: None,
             run_time: None,
             session_status: None,

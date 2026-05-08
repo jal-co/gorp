@@ -69,6 +69,7 @@ fn create_test_task(
             uid: creator_uid.to_string(),
             display_name: Some(format!("User {creator_uid}")),
         }),
+        executor: None,
         conversation_id: None,
         request_usage: None,
         agent_config_snapshot: None,

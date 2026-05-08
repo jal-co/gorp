@@ -244,6 +244,8 @@ pub struct AmbientAgentTask {
     pub session_id: Option<String>,
     pub session_link: Option<String>,
     pub creator: Option<TaskCreatorInfo>,
+    #[serde(default)]
+    pub executor: Option<TaskCreatorInfo>,
     pub conversation_id: Option<String>,
     pub request_usage: Option<RequestUsage>,
     pub is_sandbox_running: bool,
@@ -368,6 +370,13 @@ impl AmbientAgentTask {
     /// Creator's display name, if available.
     pub fn creator_display_name(&self) -> Option<String> {
         self.creator.as_ref().and_then(|c| c.display_name.clone())
+    }
+
+    /// Principal the run executed as, formatted for user-facing surfaces.
+    pub fn executor_display_name(&self) -> Option<String> {
+        self.executor
+            .as_ref()
+            .map(TaskCreatorInfo::display_name_or_uid)
     }
 
     /// Returns true if the underlying session for the ambient agent is no longer running.
@@ -503,6 +512,15 @@ pub struct TaskCreatorInfo {
     pub creator_type: String,
     pub uid: String,
     pub display_name: Option<String>,
+}
+
+impl TaskCreatorInfo {
+    pub fn display_name_or_uid(&self) -> String {
+        self.display_name
+            .clone()
+            .filter(|name| !name.trim().is_empty())
+            .unwrap_or_else(|| self.uid.clone())
+    }
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]

@@ -1792,6 +1792,22 @@ impl AgentManagementView {
             }
         }
 
+        if let Some(executor) = &entry.display.executor {
+            if let Some(name) = executor.name.as_deref().or(executor.uid.as_deref()) {
+                let label = if executor
+                    .principal_type
+                    .as_deref()
+                    .is_some_and(|principal_type| {
+                        principal_type.eq_ignore_ascii_case("service_account")
+                    }) {
+                    "Agent"
+                } else {
+                    "Executor"
+                };
+                metadata_parts.push(format!("{label}: {name}"));
+            }
+        }
+
         if let Some(run_time) = &entry.display.run_time {
             metadata_parts.push(format!("Run time: {run_time}"));
         }

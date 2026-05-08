@@ -92,6 +92,7 @@ pub struct AgentConversationDisplayData {
     pub last_updated: DateTime<Utc>,
     pub status: AgentRunDisplayStatus,
     pub creator: AgentConversationCreator,
+    pub executor: Option<AgentConversationPrincipal>,
     pub request_usage: Option<f32>,
     pub run_time: Option<String>,
     pub session_status: Option<SessionStatus>,
@@ -107,6 +108,14 @@ pub struct AgentConversationDisplayData {
 pub struct AgentConversationCreator {
     pub name: Option<String>,
     pub uid: Option<String>,
+}
+
+/// Principal information normalized for display-only rows.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct AgentConversationPrincipal {
+    pub name: Option<String>,
+    pub uid: Option<String>,
+    pub principal_type: Option<String>,
 }
 
 /// Source category that explains why an entry exists and which backing systems can refresh it.
@@ -422,6 +431,14 @@ pub(super) fn entry_for_task(
                 name: task_creator_name(task, app),
                 uid: task_creator_uid(task),
             },
+            executor: task
+                .executor
+                .as_ref()
+                .map(|executor| AgentConversationPrincipal {
+                    name: Some(executor.display_name_or_uid()),
+                    uid: Some(executor.uid.clone()),
+                    principal_type: Some(executor.creator_type.clone()),
+                }),
             request_usage: task.credits_used(),
             run_time: task_run_time(task),
             session_status: Some(task_session_status(task)),
@@ -531,6 +548,7 @@ fn entry_for_conversation_parts(
                 name: current_user_name(app),
                 uid: current_user_uid(app),
             },
+            executor: None,
             request_usage: conversation_request_usage(&metadata, history_model),
             run_time: None,
             session_status: None,

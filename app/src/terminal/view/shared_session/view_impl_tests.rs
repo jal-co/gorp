@@ -447,6 +447,7 @@ fn create_cloud_mode_task_for_user(creator_uid: &str) -> AmbientAgentTask {
             uid: creator_uid.to_string(),
             display_name: None,
         }),
+        executor: None,
         conversation_id: None,
         request_usage: None,
         is_sandbox_running: false,
