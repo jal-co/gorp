@@ -2854,6 +2854,11 @@ pub struct TerminalView {
     /// State handle for the shimmering text animation in the remote server loading footer.
     /// Persisted across renders so the animation doesn't restart.
     remote_server_shimmer_handle: ShimmeringTextStateHandle,
+
+    /// When `true`, keystrokes are forwarded to the PTY instead of the input
+    /// editor. Set when fzf's ctrl-r history widget is invoked and cleared when
+    /// fzf completes (detected via the InputBuffer hook / typeahead event).
+    fzf_passthrough_active: bool,
 }
 
 /// Parameters stashed when a code review pane open is requested with
@@ -4256,6 +4261,7 @@ impl TerminalView {
             pty_recorder: ctx
                 .add_model(|ctx| PtyRecorder::new(inactive_pty_reads_rx, window_id, ctx)),
             active_viewer_driven_size: None,
+            fzf_passthrough_active: false,
         };
         terminal_view.register_subscriptions_for_use_agent_footer(ctx);
 
@@ -7118,6 +7124,11 @@ impl TerminalView {
         if model.is_read_only() {
             return false;
         }
+        // Hide the input box while fzf's TUI is active so keystrokes route
+        // directly to the PTY.
+        if self.fzf_passthrough_active {
+            return false;
+        }
         if self.has_active_cli_agent_input_session(app) {
             return true;
         }
@@ -7346,6 +7357,15 @@ impl TerminalView {
         cleared_buffer_len: usize,
         ctx: &mut ViewContext<Self>,
     ) {
+        // When fzf passthrough is active, send ctrl-c directly to the PTY to
+        // cancel fzf and exit passthrough mode.
+        if self.fzf_passthrough_active {
+            self.fzf_passthrough_active = false;
+            self.user_write_ctrl_c_to_pty(ctx);
+            ctx.notify();
+            return;
+        }
+
         let did_resolve_prompt_suggestion = self
             .resolve_passive_suggestion(PromptSuggestionResolution::Reject { ctrl_c: true }, ctx);
         if did_resolve_prompt_suggestion {
@@ -7659,6 +7679,14 @@ impl TerminalView {
             && !model.is_read_only()
     }
 
+    /// Returns `true` when keystrokes should be routed directly to the PTY
+    /// rather than to the input editor. This is the case when a long-running
+    /// command is active **or** when an fzf passthrough session is in progress
+    /// (e.g. fzf's ctrl-r history widget running inside readline via `bind -x`).
+    fn is_pty_passthrough_active(&self) -> bool {
+        self.fzf_passthrough_active || self.is_long_running()
+    }
+
     /// Returns `true` when an interactive SSH command has been detected at
     /// preexec and the SSH block is still running (long-running). Used by
     /// the workspace to derive `PendingRemoteSession` without storing
@@ -7707,7 +7735,7 @@ impl TerminalView {
     }
 
     fn control_sequence_on_terminal(&mut self, bytes: &[u8], ctx: &mut ViewContext<Self>) {
-        if self.is_long_running() {
+        if self.is_pty_passthrough_active() {
             self.on_ssh_warpification_key_event(Some(SshKeyEvent::from_bytes(bytes)), ctx);
             self.write_user_bytes_to_pty(bytes.to_owned(), ctx);
         } else {
@@ -7776,7 +7804,7 @@ impl TerminalView {
     /// Receiving the warpui::Event::KeyDown event from a child element.
     /// Generally, this should be control characters rather than printable characters.
     fn keydown_on_terminal(&mut self, characters: &str, ctx: &mut ViewContext<Self>) {
-        if self.is_long_running() {
+        if self.is_pty_passthrough_active() {
             self.on_ssh_warpification_key_event(Some(SshKeyEvent::from_chars(characters)), ctx);
             self.highlighted_link.invalidate();
             self.report_possible_typeahead(characters);
@@ -7823,7 +7851,7 @@ impl TerminalView {
     fn typed_characters_on_terminal(&mut self, characters: &str, ctx: &mut ViewContext<Self>) {
         self.on_ssh_warpification_key_event(Some(SshKeyEvent::from_chars(characters)), ctx);
 
-        if self.should_write_typed_chars_to_pty(ctx) {
+        if self.fzf_passthrough_active || self.should_write_typed_chars_to_pty(ctx) {
             self.highlighted_link.invalidate();
             self.report_possible_typeahead(characters);
             self.write_user_bytes_to_pty(characters.as_bytes().to_vec(), ctx);
@@ -8146,6 +8174,14 @@ impl TerminalView {
     }
 
     fn handle_typeahead_event(&mut self, ctx: &mut ViewContext<Self>) {
+        // If fzf passthrough was active, the InputBuffer hook from our wrapper
+        // function signals that fzf has completed. Clear the passthrough flag
+        // so keystrokes return to the input editor.
+        if self.fzf_passthrough_active {
+            self.fzf_passthrough_active = false;
+            ctx.notify();
+        }
+
         let mut model = self.model.lock();
         let completed_block_idx = model.block_list().prev_matching_block_from_index(
             BlockFilter {
@@ -20477,7 +20513,9 @@ impl TerminalView {
                 // Write the raw ctrl-r byte to the PTY so the shell's line editor
                 // invokes fzf's history widget. The wrapper widget in the bootstrap
                 // script will report the selected command back via InputBuffer.
+                self.fzf_passthrough_active = true;
                 self.write_to_pty(vec![0x12], ctx);
+                ctx.notify();
             }
             InputEvent::CtrlC { cleared_buffer_len } => {
                 self.handle_ctrl_c_input_event(*cleared_buffer_len, ctx);
@@ -21120,7 +21158,7 @@ impl TerminalView {
                     );
                 }
             }
-        } else if self.is_long_running() {
+        } else if self.is_pty_passthrough_active() {
             self.on_ssh_warpification_key_event(None, ctx);
             let sequence =
                 EscCodes::build_escape_sequence(self.model.lock().deref(), &[EscCodes::ARROW_UP]);
@@ -21201,7 +21239,7 @@ impl TerminalView {
                     self.select_less_recent_block(false /* is_cmd_down */, ctx);
                 }
             }
-        } else if self.is_long_running() {
+        } else if self.is_pty_passthrough_active() {
             let sequence =
                 EscCodes::build_escape_sequence(self.model.lock().deref(), &[EscCodes::ARROW_DOWN]);
             self.write_user_bytes_to_pty(sequence, ctx);
@@ -21209,7 +21247,7 @@ impl TerminalView {
     }
 
     fn page_up(&mut self, ctx: &mut ViewContext<Self>) {
-        if self.is_long_running() {
+        if self.is_pty_passthrough_active() {
             // Note: We explicitly use the CSI prefix, as the terminal we are impersonating
             // (`xterm-256color`) has the escape sequence for page up defined with that prefix
             let sequence = EscCodes::build_escape_sequence_with_c1(C1::CSI, EscCodes::PAGE_UP);
@@ -21220,7 +21258,7 @@ impl TerminalView {
     }
 
     fn page_down(&mut self, ctx: &mut ViewContext<Self>) {
-        if self.is_long_running() {
+        if self.is_pty_passthrough_active() {
             // Note: We explicitly use the CSI prefix, as the terminal we are impersonating
             // (`xterm-256color`) has the escape sequence for page down defined with that prefix
             let sequence = EscCodes::build_escape_sequence_with_c1(C1::CSI, EscCodes::PAGE_DOWN);
@@ -21231,7 +21269,7 @@ impl TerminalView {
     }
 
     fn move_home(&mut self, ctx: &mut ViewContext<Self>) {
-        if self.is_long_running() {
+        if self.is_pty_passthrough_active() {
             let sequence = EscCodes::build_escape_sequence(self.model.lock().deref(), b"H");
             self.write_user_bytes_to_pty(sequence, ctx);
         } else {
@@ -21240,7 +21278,7 @@ impl TerminalView {
     }
 
     fn move_end(&mut self, ctx: &mut ViewContext<Self>) {
-        if self.is_long_running() {
+        if self.is_pty_passthrough_active() {
             let sequence = EscCodes::build_escape_sequence(self.model.lock().deref(), b"F");
             self.write_user_bytes_to_pty(sequence, ctx);
         } else {
