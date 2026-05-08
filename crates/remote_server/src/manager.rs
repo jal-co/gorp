@@ -19,6 +19,8 @@ use crate::setup::RemotePlatform;
 use crate::setup::RemoteServerSetupState;
 use crate::setup::UnsupportedReason;
 #[cfg(not(target_family = "wasm"))]
+use crate::setup::{classify_install_failure, ClassifiedInstallFailure};
+#[cfg(not(target_family = "wasm"))]
 use crate::transport::Connection;
 use crate::transport::RemoteTransport;
 use crate::HostId;
@@ -589,10 +591,14 @@ impl RemoteServerManager {
                                 me.session_platforms.insert(session_id, p.clone());
                             }
                             if let Err(error) = &check_result {
+                                let failure_category = Some(
+                                    classify_install_failure(error, None),
+                                );
                                 ctx.emit(RemoteServerManagerEvent::SetupStateChanged {
                                     session_id,
                                     state: RemoteServerSetupState::Failed {
                                         error: error.clone(),
+                                        failure_category,
                                     },
                                 });
                             }
@@ -683,10 +689,13 @@ impl RemoteServerManager {
                     let _ = spawner
                         .spawn(move |_me, ctx| {
                             if let Err(error) = &result {
+                                let classified =
+                                    ClassifiedInstallFailure::from_error_string(error);
                                 ctx.emit(RemoteServerManagerEvent::SetupStateChanged {
                                     session_id,
                                     state: RemoteServerSetupState::Failed {
                                         error: error.clone(),
+                                        failure_category: Some(classified.category),
                                     },
                                 });
                             }
@@ -784,10 +793,14 @@ impl RemoteServerManager {
                             let error = format!("{e}");
                             let _ = spawner
                                 .spawn(move |me, ctx| {
+                                    let failure_category = Some(
+                                        classify_install_failure(&error, None),
+                                    );
                                     ctx.emit(RemoteServerManagerEvent::SetupStateChanged {
                                         session_id,
                                         state: RemoteServerSetupState::Failed {
                                             error: error.clone(),
+                                            failure_category,
                                         },
                                     });
                                     ctx.emit(RemoteServerManagerEvent::SessionConnectionFailed {

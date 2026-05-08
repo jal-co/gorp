@@ -86,7 +86,8 @@ fn state_is_ready() {
 #[test]
 fn state_is_failed() {
     assert!(RemoteServerSetupState::Failed {
-        error: "test".into()
+        error: "test".into(),
+        failure_category: None,
     }
     .is_failed());
     assert!(!RemoteServerSetupState::Ready.is_failed());
@@ -96,7 +97,8 @@ fn state_is_failed() {
 fn state_is_terminal() {
     assert!(RemoteServerSetupState::Ready.is_terminal());
     assert!(RemoteServerSetupState::Failed {
-        error: "test".into()
+        error: "test".into(),
+        failure_category: None,
     }
     .is_terminal());
     assert!(RemoteServerSetupState::Unsupported {

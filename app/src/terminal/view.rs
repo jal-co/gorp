@@ -11848,8 +11848,12 @@ impl TerminalView {
         }
 
         let error = error.to_owned();
-        let banner = ctx
-            .add_typed_action_view(|_| SshRemoteServerFailedBanner::new(session_id, kind, error));
+        let failure_category = Some(
+            remote_server::setup::ClassifiedInstallFailure::from_error_string(&error).category,
+        );
+        let banner = ctx.add_typed_action_view(|_| {
+            SshRemoteServerFailedBanner::new(session_id, kind, failure_category, error)
+        });
 
         ctx.subscribe_to_view(&banner, move |me, _, event, ctx| match event {
             SshRemoteServerFailedBannerEvent::Dismissed => {

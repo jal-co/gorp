@@ -1,6 +1,10 @@
 mod glibc;
+mod install_failure;
 
 pub use glibc::{GlibcVersion, RemoteLibc};
+pub use install_failure::{
+    classify_install_failure, ClassifiedInstallFailure, InstallFailureCategory,
+};
 
 use std::time::Duration;
 
@@ -23,7 +27,14 @@ pub enum RemoteServerSetupState {
     /// Handshake complete. Ready.
     Ready,
     /// Something failed. Fall back to ControlMaster.
-    Failed { error: String },
+    Failed {
+        error: String,
+        /// Typed classification of the failure, when one could be
+        /// determined from the raw error text. `None` for failures
+        /// that predate the classifier or where classification was
+        /// not attempted.
+        failure_category: Option<InstallFailureCategory>,
+    },
     /// Preinstall check classified the host as incompatible with the
     /// prebuilt remote-server binary. The controller treats this as a
     /// clean fall-back to the legacy ControlMaster-backed SSH flow,

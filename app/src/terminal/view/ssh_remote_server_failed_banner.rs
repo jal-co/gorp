@@ -12,6 +12,8 @@ use warpui::{
     AppContext, Element, Entity, SingletonEntity, TypedActionView, View, ViewContext,
 };
 
+use remote_server::setup::InstallFailureCategory;
+
 use crate::{terminal::model::session::SessionId, ui_components::icons::Icon, Appearance};
 
 const BANNER_BODY: &str =
@@ -60,15 +62,25 @@ impl SshRemoteServerFailureKind {
 pub struct SshRemoteServerFailedBanner {
     session_id: SessionId,
     kind: SshRemoteServerFailureKind,
+    /// Typed failure category from the classifier, when available.
+    /// Used to override the generic phase-based title/description
+    /// with a more specific message.
+    failure_category: Option<InstallFailureCategory>,
     error: String,
     close_mouse_state: MouseStateHandle,
 }
 
 impl SshRemoteServerFailedBanner {
-    pub fn new(session_id: SessionId, kind: SshRemoteServerFailureKind, error: String) -> Self {
+    pub fn new(
+        session_id: SessionId,
+        kind: SshRemoteServerFailureKind,
+        failure_category: Option<InstallFailureCategory>,
+        error: String,
+    ) -> Self {
         Self {
             session_id,
             kind,
+            failure_category,
             error,
             close_mouse_state: MouseStateHandle::default(),
         }
@@ -76,6 +88,23 @@ impl SshRemoteServerFailedBanner {
 
     pub fn session_id(&self) -> SessionId {
         self.session_id
+    }
+
+    /// Returns the most specific title available: the typed category
+    /// title if classified, otherwise the phase-based kind title.
+    fn effective_title(&self) -> &str {
+        self.failure_category
+            .as_ref()
+            .map(|c| c.title())
+            .unwrap_or_else(|| self.kind.title())
+    }
+
+    /// Returns the most specific description available.
+    fn effective_description(&self) -> &str {
+        self.failure_category
+            .as_ref()
+            .map(|c| c.description())
+            .unwrap_or_else(|| self.kind.description())
     }
 }
 
@@ -106,11 +135,11 @@ impl View for SshRemoteServerFailedBanner {
         .with_margin_right(8.)
         .finish();
 
-        let title = Text::new(self.kind.title(), appearance.ui_font_family(), font_size)
+        let title = Text::new(self.effective_title(), appearance.ui_font_family(), font_size)
             .with_color(fg_color)
             .finish();
 
-        let body_text = format!("{} {BANNER_BODY}", self.kind.description());
+        let body_text = format!("{} {BANNER_BODY}", self.effective_description());
         let body = Text::new(body_text, appearance.ui_font_family(), small_font_size)
             .soft_wrap(true)
             .with_color(muted_color)
