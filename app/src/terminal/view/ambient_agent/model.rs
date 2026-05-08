@@ -5,13 +5,14 @@ use session_sharing_protocol::common::SessionId;
 use warp_cli::agent::Harness;
 use warp_core::features::FeatureFlag;
 use warp_core::send_telemetry_from_ctx;
+use warp_terminal::model::BlockId;
 use warpui::r#async::{SpawnedFutureHandle, Timer};
 use warpui::{AppContext, Entity, EntityId, ModelContext, SingletonEntity};
 
 use crate::ai::active_agent_views_model::ActiveAgentViewsModel;
 use crate::ai::agent::{conversation::AIConversationId, extract_user_query_mode};
 use crate::ai::ambient_agents::spawn::{spawn_task, submit_run_followup, AmbientAgentEvent};
-use crate::ai::ambient_agents::task::HarnessConfig;
+use crate::ai::ambient_agents::task::{HarnessAuthSecretsConfig, HarnessConfig};
 use crate::ai::ambient_agents::telemetry::CloudAgentTelemetryEvent;
 use crate::ai::ambient_agents::AmbientAgentTaskId;
 use crate::ai::ambient_agents::{
@@ -196,7 +197,11 @@ pub struct AmbientAgentViewModel {
     /// Selected worker host for the cloud agent run. Populated from the HostSelector
     /// (which resolves env var > workspace setting) and read by `spawn_agent`.
     worker_host: Option<String>,
-    /// Whether the harness CLI (e.g. `claude`, `gemini`) has started running for a non-oz run.
+    /// Selected model id for a third-party harness (e.g. `"opus"` for Claude).
+    harness_model_id: Option<String>,
+    /// Name of the selected auth secret for the current non-Oz harness.
+    harness_auth_secret_name: Option<String>,
+    /// Whether the harness CLI
     /// Used to transition the cloud-mode setup UI out of the pre-first-exchange phase when
     /// there is no oz `AppendedExchange` to key off of.
     harness_command_started: bool,
@@ -262,6 +267,8 @@ impl AmbientAgentViewModel {
             conversation_id: None,
             harness,
             worker_host: None,
+            harness_model_id: None,
+            harness_auth_secret_name: None,
             harness_command_started: false,
             active_execution_session_id: None,
             last_ended_execution_session_id: None,
@@ -406,11 +413,45 @@ impl AmbientAgentViewModel {
             return;
         }
         self.harness = harness;
+        self.harness_model_id = None;
+        self.harness_auth_secret_name = None;
         ctx.emit(AmbientAgentViewModelEvent::HarnessSelected);
     }
 
     pub fn set_worker_host(&mut self, worker_host: Option<String>) {
         self.worker_host = worker_host;
+    }
+
+    pub fn selected_harness_model_id(&self) -> Option<&str> {
+        self.harness_model_id.as_deref()
+    }
+
+    pub fn set_harness_model_id(
+        &mut self,
+        harness_model_id: Option<String>,
+        ctx: &mut ModelContext<Self>,
+    ) {
+        if self.harness_model_id == harness_model_id {
+            return;
+        }
+        self.harness_model_id = harness_model_id;
+        ctx.emit(AmbientAgentViewModelEvent::HarnessModelSelected);
+    }
+
+    pub fn selected_harness_auth_secret_name(&self) -> Option<&str> {
+        self.harness_auth_secret_name.as_deref()
+    }
+
+    pub fn set_harness_auth_secret_name(
+        &mut self,
+        name: Option<String>,
+        ctx: &mut ModelContext<Self>,
+    ) {
+        if self.harness_auth_secret_name == name {
+            return;
+        }
+        self.harness_auth_secret_name = name;
+        ctx.emit(AmbientAgentViewModelEvent::AuthSecretSelected);
     }
 
     /// True when the run is configured to use a non-Oz execution harness and the
@@ -530,7 +571,11 @@ impl AmbientAgentViewModel {
 
     /// Marks the harness CLI as started and emits `HarnessCommandStarted`.
     /// Idempotent: subsequent calls after the first are no-ops and do not re-emit.
-    pub(super) fn mark_harness_command_started(&mut self, ctx: &mut ModelContext<Self>) {
+    pub(super) fn mark_harness_command_started(
+        &mut self,
+        block_id: BlockId,
+        ctx: &mut ModelContext<Self>,
+    ) {
         debug_assert!(
             self.harness != Harness::Oz,
             "harness_command_started is only meaningful for non-oz runs"
@@ -539,7 +584,7 @@ impl AmbientAgentViewModel {
             return;
         }
         self.harness_command_started = true;
-        ctx.emit(AmbientAgentViewModelEvent::HarnessCommandStarted);
+        ctx.emit(AmbientAgentViewModelEvent::HarnessCommandStarted { block_id });
     }
 
     /// Sets the selected environment ID.
@@ -786,6 +831,7 @@ impl AmbientAgentViewModel {
         self.environment_id = None;
         self.task_id = None;
         self.conversation_id = None;
+        self.harness_model_id = None;
         self.harness_command_started = false;
         self.active_execution_session_id = None;
         self.last_ended_execution_session_id = None;
@@ -807,26 +853,41 @@ impl AmbientAgentViewModel {
     /// and harness. Shared by `spawn_agent` and the local-to-cloud handoff path so
     /// both flows route to the same worker host and inherit the same defaults.
     pub(crate) fn build_default_spawn_config(&self, ctx: &AppContext) -> AgentConfigSnapshot {
-        let model_id = LLMPreferences::as_ref(ctx)
-            .get_active_base_model(ctx, Some(self.terminal_view_id))
-            .id
-            .to_string();
-
         // Determine computer_use_enabled based on workspace AI autonomy settings
         let CloudAgentComputerUseState { enabled, .. } =
             ComputerUsePermission::resolve_cloud_agent_state(ctx);
         let computer_use_enabled = Some(enabled);
 
         let selected_harness = self.selected_harness();
-        let harness_override = (selected_harness != Harness::Oz)
-            .then(|| HarnessConfig::from_harness_type(selected_harness));
+
+        let oz_model = (selected_harness == Harness::Oz).then(|| {
+            LLMPreferences::as_ref(ctx)
+                .get_active_base_model(ctx, Some(self.terminal_view_id))
+                .id
+                .to_string()
+        });
+        let third_party_harness = (selected_harness != Harness::Oz).then(|| HarnessConfig {
+            harness_type: selected_harness,
+            model_id: self.harness_model_id.clone(),
+        });
+
+        let harness_auth_secrets =
+            self.harness_auth_secret_name
+                .as_ref()
+                .and_then(|name| match selected_harness {
+                    Harness::Claude => Some(HarnessAuthSecretsConfig {
+                        claude_auth_secret_name: Some(name.clone()),
+                    }),
+                    _ => None,
+                });
 
         AgentConfigSnapshot {
             environment_id: self.environment_id.as_ref().map(|id| id.to_string()),
-            model_id: Some(model_id),
+            model_id: oz_model,
             computer_use_enabled,
             worker_host: self.worker_host.clone(),
-            harness: harness_override,
+            harness: third_party_harness,
+            harness_auth_secrets,
             ..Default::default()
         }
     }
@@ -847,6 +908,7 @@ impl AmbientAgentViewModel {
             config,
             title: None,
             team: None,
+            agent_identity_uid: None,
             skill: None,
             attachments,
             interactive: None,
@@ -1298,6 +1360,7 @@ impl AmbientAgentViewModel {
             referenced_attachments: vec![],
             conversation_id: Some(forked_conversation_id),
             initial_snapshot_token,
+            agent_identity_uid: None,
         };
         self.spawn_agent_with_request(request, ctx);
     }
@@ -1383,10 +1446,14 @@ pub enum AmbientAgentViewModelEvent {
     HarnessSelected,
     /// The selected worker host changed via the HostSelector.
     HostSelected,
+    /// The selected third-party harness model id changed (e.g. user picked `"opus"` for Claude).
+    HarnessModelSelected,
     /// The harness CLI (for non-oz runs) has started executing in the shared session.
     /// Fires once per run and signals the transition out of the pre-first-exchange phase
     /// for claude / gemini / other third-party harnesses.
-    HarnessCommandStarted,
+    HarnessCommandStarted {
+        block_id: BlockId,
+    },
     /// The pane's `pending_handoff` was updated.
     PendingHandoffChanged,
     /// The async handoff snapshot upload failed. The input layer subscribes to
@@ -1396,6 +1463,8 @@ pub enum AmbientAgentViewModelEvent {
     },
 
     UpdatedSetupCommandVisibility,
+    /// The selected harness auth secret changed.
+    AuthSecretSelected,
 }
 
 impl Entity for AmbientAgentViewModel {

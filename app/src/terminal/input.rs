@@ -347,7 +347,8 @@ use crate::ai::blocklist::agent_view::{
     AgentInputFooter, AgentInputFooterEvent, AgentViewController,
 };
 use crate::terminal::view::ambient_agent::{
-    HarnessSelector, HarnessSelectorEvent, HostSelector, HostSelectorEvent, NakedHeaderButtonTheme,
+    AuthSecretFtuxView, AuthSecretSelector, AuthSecretSelectorEvent, HarnessSelector,
+    HarnessSelectorEvent, HostSelector, HostSelectorEvent, NakedHeaderButtonTheme,
 };
 use async_channel::Sender;
 use futures::stream::AbortHandle;
@@ -1619,6 +1620,7 @@ pub struct Input {
     inline_slash_commands_view: ViewHandle<InlineSlashCommandView>,
     cloud_mode_v2_slash_commands_view: Option<ViewHandle<CloudModeV2SlashCommandView>>,
     slash_command_data_source: ModelHandle<SlashCommandDataSource>,
+    cloud_mode_composer_slash_command_data_source: Option<ModelHandle<SlashCommandDataSource>>,
 
     /// Inline conversation menu for selecting AI conversations.
     inline_conversation_menu_view: ViewHandle<InlineConversationMenuView>,
@@ -1687,6 +1689,8 @@ struct AmbientAgentViewState {
     #[allow(dead_code)]
     harness_selector: ViewHandle<HarnessSelector>,
     host_selector: Option<ViewHandle<HostSelector>>,
+    auth_secret_selector: Option<ViewHandle<AuthSecretSelector>>,
+    auth_secret_ftux_view: Option<ViewHandle<AuthSecretFtuxView>>,
 }
 
 impl AmbientAgentViewState {
@@ -2236,7 +2240,7 @@ impl Input {
             )
         });
 
-        let ambient_agent_view_state =
+        let mut ambient_agent_view_state =
             ambient_agent_view_model
                 .as_ref()
                 .map(|view_model| AmbientAgentViewState {
@@ -2347,7 +2351,47 @@ impl Input {
                     } else {
                         None
                     },
+                    auth_secret_selector: None,
+                    auth_secret_ftux_view: None,
                 });
+        if let Some(state) = ambient_agent_view_state.as_mut() {
+            if FeatureFlag::CloudModeInputV2.is_enabled() {
+                let selector = ctx.add_typed_action_view(|ctx| {
+                    AuthSecretSelector::new(
+                        menu_positioning_provider.clone(),
+                        state.view_model.clone(),
+                        ctx,
+                    )
+                });
+                ctx.subscribe_to_view(&selector, |me, _, event, ctx| match event {
+                    AuthSecretSelectorEvent::MenuVisibilityChanged { open: false } => {
+                        me.focus_input_box(ctx);
+                    }
+                    AuthSecretSelectorEvent::NewTypeSelected {
+                        harness,
+                        type_index,
+                    } => {
+                        if let Some(ftux_view) = me.auth_secret_ftux_view().cloned() {
+                            let harness = *harness;
+                            let type_index = *type_index;
+                            ftux_view.update(ctx, |view, ctx| {
+                                view.enter_creation_state_public(harness, type_index, ctx);
+                            });
+                        }
+                        ctx.notify();
+                    }
+                    AuthSecretSelectorEvent::MenuVisibilityChanged { open: true } => {}
+                });
+                let ftux_view = {
+                    let view_model_for_ftux = state.view_model.clone();
+                    ctx.add_typed_action_view(|ctx| {
+                        AuthSecretFtuxView::new(view_model_for_ftux, ctx)
+                    })
+                };
+                state.auth_secret_selector = Some(selector);
+                state.auth_secret_ftux_view = Some(ftux_view);
+            }
+        }
         ctx.subscribe_to_view(&agent_input_footer, |me, _, event, ctx| {
             match event {
                 #[cfg(feature = "voice_input")]
@@ -3121,21 +3165,24 @@ impl Input {
                 agent_view_controller: agent_view_controller.clone(),
                 cli_subagent_controller: cli_subagent_controller.clone(),
                 terminal_view_id,
+                ambient_agent_view_model: ambient_agent_view_model.clone(),
             };
             SlashCommandDataSource::new(args, ctx)
         });
 
-        let v2_slash_command_data_source = if FeatureFlag::CloudModeInputV2.is_enabled() {
-            let args = slash_commands::DataSourceArgs {
-                active_session: active_session.clone(),
-                agent_view_controller: agent_view_controller.clone(),
-                cli_subagent_controller: cli_subagent_controller.clone(),
-                terminal_view_id,
+        let cloud_mode_composer_slash_command_data_source =
+            if FeatureFlag::CloudModeInputV2.is_enabled() {
+                let args = slash_commands::DataSourceArgs {
+                    active_session: active_session.clone(),
+                    agent_view_controller: agent_view_controller.clone(),
+                    cli_subagent_controller: cli_subagent_controller.clone(),
+                    terminal_view_id,
+                    ambient_agent_view_model: ambient_agent_view_model.clone(),
+                };
+                Some(ctx.add_model(|ctx| SlashCommandDataSource::for_cloud_mode_v2(args, ctx)))
+            } else {
+                None
             };
-            Some(ctx.add_model(|ctx| SlashCommandDataSource::for_cloud_mode_v2(args, ctx)))
-        } else {
-            None
-        };
         let slash_command_model = ctx.add_model(|ctx| {
             SlashCommandModel::new(
                 &buffer_model,
@@ -3298,7 +3345,7 @@ impl Input {
         });
 
         let cloud_mode_v2_slash_commands_view =
-            if let Some(v2_data_source) = v2_slash_command_data_source {
+            if let Some(v2_data_source) = cloud_mode_composer_slash_command_data_source.clone() {
                 let view = ctx.add_typed_action_view(|ctx| {
                     CloudModeV2SlashCommandView::new(
                         &slash_command_model,
@@ -3476,6 +3523,7 @@ impl Input {
             agent_shortcut_view_model,
             ambient_agent_view_state,
             slash_command_data_source,
+            cloud_mode_composer_slash_command_data_source,
             ephemeral_message_model,
             input_contents_before_prompt_chip_command: None,
         };
@@ -3562,6 +3610,18 @@ impl Input {
         self.ambient_agent_view_state
             .as_ref()
             .and_then(|state| state.host_selector.as_ref())
+    }
+
+    fn auth_secret_selector(&self) -> Option<&ViewHandle<AuthSecretSelector>> {
+        self.ambient_agent_view_state
+            .as_ref()
+            .and_then(|state| state.auth_secret_selector.as_ref())
+    }
+
+    pub(super) fn auth_secret_ftux_view(&self) -> Option<&ViewHandle<AuthSecretFtuxView>> {
+        self.ambient_agent_view_state
+            .as_ref()
+            .and_then(|state| state.auth_secret_ftux_view.as_ref())
     }
 
     /// Opens the V2 cloud-mode host selector popover, if the feature is enabled and the
@@ -7702,6 +7762,14 @@ impl Input {
     }
 
     pub fn focus_input_box(&self, ctx: &mut ViewContext<Self>) {
+        if self.should_show_auth_secret_ftux(ctx) {
+            if let Some(ftux_view) = self.auth_secret_ftux_view().cloned() {
+                ftux_view.update(ctx, |view, ctx| {
+                    view.focus_dropdown_editor(ctx);
+                });
+                return;
+            }
+        }
         ctx.focus_self();
     }
 
@@ -7770,6 +7838,25 @@ impl Input {
     }
 
     fn editor_up(&mut self, ctx: &mut ViewContext<Self>) {
+        if self.should_show_auth_secret_ftux(ctx) {
+            if let Some(ftux_view) = self.auth_secret_ftux_view().cloned() {
+                ftux_view.update(ctx, |view, ctx| {
+                    view.select_previous_in_dropdown(ctx);
+                });
+            }
+            return;
+        }
+
+        if let Some(selector) = self.auth_secret_selector() {
+            if selector.as_ref(ctx).is_menu_open() {
+                let selector = selector.clone();
+                selector.update(ctx, |selector, ctx| {
+                    selector.select_previous(ctx);
+                });
+                return;
+            }
+        }
+
         // History and input suggestions are not available for
         // read-only viewers in a shared session
         if self.model.lock().shared_session_status().is_reader() {
@@ -13855,10 +13942,17 @@ impl Input {
             footer.set_current_repo_path(repo_path.clone(), footer_ctx);
         });
 
-        self.slash_command_data_source
-            .update(ctx, |data_source, ctx| {
+        self.slash_command_data_source.update(ctx, {
+            let repo_path = repo_path.clone();
+            |data_source, ctx| {
+                data_source.set_active_repo_root(repo_path, ctx);
+            }
+        });
+        if let Some(data_source) = self.cloud_mode_composer_slash_command_data_source.as_ref() {
+            data_source.update(ctx, |data_source, ctx| {
                 data_source.set_active_repo_root(repo_path, ctx);
             });
+        }
     }
 
     fn active_session_path_if_local(&self, ctx: &ViewContext<Self>) -> Option<&Path> {
