@@ -5929,7 +5929,15 @@ impl Workspace {
                         );
                     }
                     FileLocation::Remote(_) => {
-                        self.open_code(code_source, EditorLayout::SplitPane, None, false, &[], ctx);
+                        #[cfg(feature = "local_fs")]
+                        self.open_code(
+                            code_source,
+                            crate::util::openable_file_type::EditorLayout::SplitPane,
+                            None,
+                            false,
+                            &[],
+                            ctx,
+                        );
                     }
                 }
             }
