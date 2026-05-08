@@ -4,7 +4,6 @@ pub use glibc::{GlibcVersion, RemoteLibc};
 
 use std::time::Duration;
 
-use anyhow::{anyhow, Result};
 use warp_core::channel::{Channel, ChannelState};
 
 /// State machine for the remote server install → launch → initialize flow.
@@ -99,6 +98,15 @@ pub enum UnsupportedReason {
     },
     NonGlibc {
         name: String,
+    },
+    /// The remote host's CPU architecture is not supported by the
+    /// prebuilt remote-server binary (e.g. `armv7l`, `i686`, `mips`).
+    UnsupportedArch {
+        arch: String,
+    },
+    /// The remote host's OS kernel is not supported (e.g. `FreeBSD`).
+    UnsupportedOs {
+        os: String,
     },
 }
 
@@ -236,35 +244,63 @@ impl RemoteArch {
     }
 }
 
+/// Typed error from [`parse_uname_output`], distinguishing
+/// genuinely-unsupported platforms from malformed output.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum PlatformParseError {
+    /// `uname` output was empty or unparseable.
+    Malformed(String),
+    /// The OS kernel name is not one we ship a binary for.
+    UnsupportedOs(String),
+    /// The CPU architecture is not one we ship a binary for.
+    UnsupportedArch(String),
+}
+
+impl std::fmt::Display for PlatformParseError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Malformed(msg) => write!(f, "{msg}"),
+            Self::UnsupportedOs(os) => write!(f, "unsupported OS: {os}"),
+            Self::UnsupportedArch(arch) => write!(f, "unsupported arch: {arch}"),
+        }
+    }
+}
+
+impl std::error::Error for PlatformParseError {}
+
 /// Parse `uname -sm` output into a `RemotePlatform`.
 ///
 /// The expected format is `<os> <arch>`, e.g. `Linux x86_64` or `Darwin arm64`.
 /// Takes the last line to skip any shell initialization output.
-pub fn parse_uname_output(output: &str) -> Result<RemotePlatform> {
+///
+/// Returns a typed [`PlatformParseError`] so the caller can distinguish
+/// genuinely-unsupported architectures/OSes from parse failures and
+/// route them to `Unsupported` rather than generic `Failed`.
+pub fn parse_uname_output(output: &str) -> std::result::Result<RemotePlatform, PlatformParseError> {
     let line = output
         .lines()
         .last()
-        .ok_or_else(|| anyhow!("empty uname output"))?
+        .ok_or_else(|| PlatformParseError::Malformed("empty uname output".to_string()))?
         .trim();
 
     let mut parts = line.split_whitespace();
-    let os_str = parts
-        .next()
-        .ok_or_else(|| anyhow!("missing OS in uname output: {line}"))?;
-    let arch_str = parts
-        .next()
-        .ok_or_else(|| anyhow!("missing arch in uname output: {line}"))?;
+    let os_str = parts.next().ok_or_else(|| {
+        PlatformParseError::Malformed(format!("missing OS in uname output: {line}"))
+    })?;
+    let arch_str = parts.next().ok_or_else(|| {
+        PlatformParseError::Malformed(format!("missing arch in uname output: {line}"))
+    })?;
 
     let os = match os_str {
         "Linux" => RemoteOs::Linux,
         "Darwin" => RemoteOs::MacOs,
-        other => return Err(anyhow!("unsupported OS: {other}")),
+        other => return Err(PlatformParseError::UnsupportedOs(other.to_string())),
     };
 
     let arch = match arch_str {
         "x86_64" => RemoteArch::X86_64,
         "aarch64" | "arm64" | "armv8l" => RemoteArch::Aarch64,
-        other => return Err(anyhow!("unsupported arch: {other}")),
+        other => return Err(PlatformParseError::UnsupportedArch(other.to_string())),
     };
 
     Ok(RemotePlatform { os, arch })

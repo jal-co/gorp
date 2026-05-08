@@ -111,8 +111,28 @@ pub async fn run_ssh_command(
     .map_err(|e| anyhow!("SSH command failed to execute: {e}"))
 }
 
-/// Pipe a script into `bash -s` on the remote host via the ControlMaster
-/// socket. Returns a result where:
+/// The remote shell interpreter to pipe scripts into via `<shell> -s`.
+///
+/// [`Sh`] is preferred for POSIX-compatible scripts because it works on
+/// hosts that have `/bin/sh` but no `/bin/bash` (e.g. Alpine, BusyBox).
+/// [`Bash`] is kept for scripts that genuinely require bash features.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RemoteShell {
+    Sh,
+    Bash,
+}
+
+impl RemoteShell {
+    fn interpreter(self) -> &'static str {
+        match self {
+            Self::Sh => "sh -s",
+            Self::Bash => "bash -s",
+        }
+    }
+}
+
+/// Pipe a script into `<shell> -s` on the remote host via the
+/// ControlMaster socket. Returns a result where:
 /// - `Err` for transport-level failures (e.g. couldn't spawn `ssh`, or timeout).
 /// - `Ok(output)` callers should check `output.status` to distinguish a successful remote script from a non-zero remote exit.
 ///
@@ -120,14 +140,19 @@ pub async fn run_ssh_command(
 /// argument because the install script is multi-line and contains shell
 /// constructs (case statements, variable expansions, single/double quotes)
 /// that would require complex, fragile escaping if passed as an argument.
-/// The `bash -s` + stdin approach avoids all escaping issues and has no
+/// The `<shell> -s` + stdin approach avoids all escaping issues and has no
 /// argument length limits.
-pub async fn run_ssh_script(socket_path: &Path, script: &str, timeout: Duration) -> Result<Output> {
+pub async fn run_ssh_script_with_shell(
+    socket_path: &Path,
+    script: &str,
+    shell: RemoteShell,
+    timeout: Duration,
+) -> Result<Output> {
     use std::process::Stdio;
 
     let mut child = Command::new("ssh")
         .args(ssh_args(socket_path))
-        .arg("bash -s")
+        .arg(shell.interpreter())
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -142,7 +167,7 @@ pub async fn run_ssh_script(socket_path: &Path, script: &str, timeout: Duration)
             .write_all(script.as_bytes())
             .await
             .map_err(|e| anyhow!("Failed to write script to stdin: {e}"))?;
-        // Close stdin so the remote bash exits after reading the script.
+        // Close stdin so the remote shell exits after reading the script.
         drop(stdin);
     }
 
@@ -152,6 +177,14 @@ pub async fn run_ssh_script(socket_path: &Path, script: &str, timeout: Duration)
         .await
         .map_err(|_| anyhow!("Script timed out after {timeout:?}"))?
         .map_err(|e| anyhow!("Script failed: {e}"))
+}
+
+/// Convenience wrapper: pipes a script into `bash -s` on the remote host.
+///
+/// Equivalent to `run_ssh_script_with_shell(…, RemoteShell::Bash, …)`.
+/// Kept for backward compatibility with existing call sites.
+pub async fn run_ssh_script(socket_path: &Path, script: &str, timeout: Duration) -> Result<Output> {
+    run_ssh_script_with_shell(socket_path, script, RemoteShell::Bash, timeout).await
 }
 
 /// Upload a local file to the remote host via `scp`, reusing the

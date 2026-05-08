@@ -53,27 +53,100 @@ fn parse_uname_trims_whitespace() {
 #[test]
 fn parse_uname_unsupported_os() {
     let result = parse_uname_output("Windows x86_64");
-    assert!(result.is_err());
-    assert!(result.unwrap_err().to_string().contains("unsupported OS"));
+    assert_eq!(
+        result.unwrap_err(),
+        PlatformParseError::UnsupportedOs("Windows".to_string())
+    );
 }
 
 #[test]
 fn parse_uname_unsupported_arch() {
     let result = parse_uname_output("Linux mips");
-    assert!(result.is_err());
-    assert!(result.unwrap_err().to_string().contains("unsupported arch"));
+    assert_eq!(
+        result.unwrap_err(),
+        PlatformParseError::UnsupportedArch("mips".to_string())
+    );
+}
+
+#[test]
+fn parse_uname_unsupported_arch_armv7l() {
+    let result = parse_uname_output("Linux armv7l");
+    assert_eq!(
+        result.unwrap_err(),
+        PlatformParseError::UnsupportedArch("armv7l".to_string())
+    );
+}
+
+#[test]
+fn parse_uname_unsupported_arch_i686() {
+    let result = parse_uname_output("Linux i686");
+    assert_eq!(
+        result.unwrap_err(),
+        PlatformParseError::UnsupportedArch("i686".to_string())
+    );
+}
+
+#[test]
+fn parse_uname_unsupported_os_freebsd() {
+    let result = parse_uname_output("FreeBSD amd64");
+    assert_eq!(
+        result.unwrap_err(),
+        PlatformParseError::UnsupportedOs("FreeBSD".to_string())
+    );
 }
 
 #[test]
 fn parse_uname_empty_output() {
     let result = parse_uname_output("");
-    assert!(result.is_err());
+    assert!(matches!(
+        result.unwrap_err(),
+        PlatformParseError::Malformed(_)
+    ));
 }
 
 #[test]
 fn parse_uname_missing_arch() {
     let result = parse_uname_output("Linux");
-    assert!(result.is_err());
+    assert!(matches!(
+        result.unwrap_err(),
+        PlatformParseError::Malformed(_)
+    ));
+}
+
+#[test]
+fn platform_parse_error_display() {
+    assert_eq!(
+        PlatformParseError::UnsupportedOs("Windows".to_string()).to_string(),
+        "unsupported OS: Windows"
+    );
+    assert_eq!(
+        PlatformParseError::UnsupportedArch("mips".to_string()).to_string(),
+        "unsupported arch: mips"
+    );
+    assert_eq!(
+        PlatformParseError::Malformed("bad output".to_string()).to_string(),
+        "bad output"
+    );
+}
+
+#[test]
+fn unsupported_reason_arch_variant() {
+    let reason = UnsupportedReason::UnsupportedArch {
+        arch: "armv7l".to_string(),
+    };
+    let state = RemoteServerSetupState::Unsupported { reason };
+    assert!(state.is_unsupported());
+    assert!(state.is_terminal());
+}
+
+#[test]
+fn unsupported_reason_os_variant() {
+    let reason = UnsupportedReason::UnsupportedOs {
+        os: "FreeBSD".to_string(),
+    };
+    let state = RemoteServerSetupState::Unsupported { reason };
+    assert!(state.is_unsupported());
+    assert!(state.is_terminal());
 }
 
 #[test]
@@ -265,6 +338,77 @@ fn install_script_tilde_expansion_resolves_correctly() {
             "[{label}] install_dir resolved incorrectly",
         );
     }
+}
+
+/// Verify the install script works under POSIX `/bin/sh` as well as bash.
+/// Since the script now uses `#!/bin/sh` and is piped via `sh -s`, it
+/// must be free of bashisms.
+#[cfg(unix)]
+#[test]
+fn install_script_tilde_expansion_works_under_sh() {
+    use command::blocking::Command;
+    use std::process::Stdio;
+
+    let sh = "/bin/sh";
+    if !std::path::Path::new(sh).exists() {
+        // Shouldn't happen on any Unix, but skip gracefully.
+        return;
+    }
+
+    let script = install_script(None);
+    let cutoff = script.find("mkdir -p \"$install_dir\"").expect(
+        "install script no longer contains the `mkdir -p \"$install_dir\"` \
+         checkpoint this test relies on; update the test alongside the \
+         script change",
+    );
+    let probe = format!(
+        "{prefix}\nprintf '%s' \"$install_dir\"\nexit 0\n",
+        prefix = &script[..cutoff],
+    );
+
+    let fake_home = "/home/testuser";
+    let output = Command::new(sh)
+        .arg("-c")
+        .arg(&probe)
+        .env("HOME", fake_home)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+        .expect("failed to spawn sh");
+
+    assert!(
+        output.status.success(),
+        "sh exited with {:?}: stderr={}",
+        output.status,
+        String::from_utf8_lossy(&output.stderr),
+    );
+
+    let install_dir = String::from_utf8_lossy(&output.stdout);
+    let expected = remote_server_dir().replacen('~', fake_home, 1);
+    assert_eq!(
+        install_dir, expected,
+        "install_dir resolved incorrectly under sh"
+    );
+}
+
+/// Verify the install script's arch mapping includes armv8l.
+#[test]
+fn install_script_maps_armv8l_to_aarch64() {
+    let template = INSTALL_SCRIPT_TEMPLATE;
+    assert!(
+        template.contains("armv8l"),
+        "install_remote_server.sh must map armv8l to aarch64 to match \
+         the Rust-side parse_uname_output mapping",
+    );
+}
+
+/// Verify the preinstall check script declares POSIX sh compatibility.
+#[test]
+fn preinstall_check_script_uses_posix_sh() {
+    assert!(
+        PREINSTALL_CHECK_SCRIPT.starts_with("#!/bin/sh"),
+        "preinstall_check.sh must use #!/bin/sh for POSIX compatibility",
+    );
 }
 
 /// Regression: guards against re-introducing the

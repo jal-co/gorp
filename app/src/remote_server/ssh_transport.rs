@@ -16,9 +16,10 @@ use remote_server::auth::RemoteServerAuthContext;
 use remote_server::client::RemoteServerClient;
 use remote_server::manager::RemoteServerExitStatus;
 use remote_server::setup::{
-    parse_uname_output, remote_server_daemon_dir, PreinstallCheckResult, RemotePlatform,
+    parse_uname_output, remote_server_daemon_dir, PlatformParseError, PreinstallCheckResult,
+    RemotePlatform,
 };
-use remote_server::ssh::ssh_args;
+use remote_server::ssh::{ssh_args, RemoteShell};
 use remote_server::transport::{Connection, RemoteTransport};
 
 /// SSH transport: connects via a ControlMaster socket.
@@ -75,22 +76,52 @@ impl SshTransport {
     }
 }
 
+/// Error from [`detect_remote_platform`] that preserves the typed
+/// [`PlatformParseError`] for callers that want to route unsupported
+/// arch/OS to `Unsupported` instead of generic `Failed`.
+#[derive(Debug)]
+enum DetectPlatformError {
+    /// SSH-level failure or unparseable output.
+    Transport(anyhow::Error),
+    /// `uname` ran but reported an unsupported OS or arch.
+    Unsupported(PlatformParseError),
+}
+
+impl std::fmt::Display for DetectPlatformError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Transport(e) => write!(f, "{e:#}"),
+            Self::Unsupported(e) => write!(f, "{e}"),
+        }
+    }
+}
+
 /// Runs `uname -sm` on the remote host via the ControlMaster socket and
 /// parses the output into a [`RemotePlatform`].
-async fn detect_remote_platform(socket_path: &Path) -> anyhow::Result<RemotePlatform> {
+async fn detect_remote_platform(
+    socket_path: &Path,
+) -> std::result::Result<RemotePlatform, DetectPlatformError> {
     let output = remote_server::ssh::run_ssh_command(
         socket_path,
         "uname -sm",
         remote_server::setup::CHECK_TIMEOUT,
     )
-    .await?;
+    .await
+    .map_err(DetectPlatformError::Transport)?;
     if output.status.success() {
         let stdout = String::from_utf8_lossy(&output.stdout);
-        Ok(parse_uname_output(&stdout)?)
+        parse_uname_output(&stdout).map_err(|e| match e {
+            PlatformParseError::UnsupportedOs(_) | PlatformParseError::UnsupportedArch(_) => {
+                DetectPlatformError::Unsupported(e)
+            }
+            PlatformParseError::Malformed(_) => DetectPlatformError::Transport(e.into()),
+        })
     } else {
         let code = output.status.code().unwrap_or(-1);
         let stderr = String::from_utf8_lossy(&output.stderr);
-        anyhow::bail!("uname -sm exited with code {code}: {stderr}")
+        Err(DetectPlatformError::Transport(anyhow::anyhow!(
+            "uname -sm exited with code {code}: {stderr}"
+        )))
     }
 }
 
@@ -102,7 +133,7 @@ impl RemoteTransport for SshTransport {
         Box::pin(async move {
             detect_remote_platform(&socket_path)
                 .await
-                .map_err(|e| format!("{e:#}"))
+                .map_err(|e| format!("{e}"))
         })
     }
 
@@ -111,9 +142,12 @@ impl RemoteTransport for SshTransport {
     ) -> Pin<Box<dyn Future<Output = Result<PreinstallCheckResult, String>> + Send>> {
         let socket_path = self.socket_path.clone();
         Box::pin(async move {
-            match remote_server::ssh::run_ssh_script(
+            // Use POSIX sh — the preinstall check script is sh-compatible
+            // and this lets it run on hosts without bash.
+            match remote_server::ssh::run_ssh_script_with_shell(
                 &socket_path,
                 remote_server::setup::PREINSTALL_CHECK_SCRIPT,
+                RemoteShell::Sh,
                 remote_server::setup::CHECK_TIMEOUT,
             )
             .await
@@ -203,9 +237,12 @@ impl RemoteTransport for SshTransport {
                 "Installing remote server binary to {}",
                 remote_server::setup::remote_server_binary()
             );
-            match remote_server::ssh::run_ssh_script(
+            // Use POSIX sh — the install script is sh-compatible and
+            // this lets it run on hosts without bash.
+            match remote_server::ssh::run_ssh_script_with_shell(
                 &socket_path,
                 &script,
+                RemoteShell::Sh,
                 remote_server::setup::INSTALL_TIMEOUT,
             )
             .await
@@ -325,7 +362,7 @@ async fn scp_install_fallback(socket_path: &Path) -> anyhow::Result<()> {
     // threading the platform through the trait.
     let platform = detect_remote_platform(socket_path)
         .await
-        .map_err(|e| anyhow::anyhow!("SCP fallback: {e:#}"))?;
+        .map_err(|e| anyhow::anyhow!("SCP fallback: {e}"))?;
 
     let url = remote_server::setup::download_tarball_url(&platform);
     let remote_tarball_path = format!(
@@ -381,7 +418,14 @@ async fn scp_install_fallback(socket_path: &Path) -> anyhow::Result<()> {
 
     let script = remote_server::setup::install_script(Some(&remote_tarball_path));
 
-    let output = remote_server::ssh::run_ssh_script(socket_path, &script, timeout).await?;
+    // Use POSIX sh for the extraction script as well.
+    let output = remote_server::ssh::run_ssh_script_with_shell(
+        socket_path,
+        &script,
+        RemoteShell::Sh,
+        timeout,
+    )
+    .await?;
     if output.status.success() {
         Ok(())
     } else {
