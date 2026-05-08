@@ -16,6 +16,7 @@ fn descendant_conversation_ids_in_spawn_order_flattens_nested_children_preorder(
                 terminal_view_id,
                 "oz-env-check".to_string(),
                 orchestrator_id,
+                None,
                 ctx,
             )
         });
@@ -24,6 +25,7 @@ fn descendant_conversation_ids_in_spawn_order_flattens_nested_children_preorder(
                 terminal_view_id,
                 "sibling-agent".to_string(),
                 orchestrator_id,
+                None,
                 ctx,
             )
         });
@@ -32,6 +34,7 @@ fn descendant_conversation_ids_in_spawn_order_flattens_nested_children_preorder(
                 terminal_view_id,
                 "codex-child".to_string(),
                 child_a,
+                None,
                 ctx,
             )
         });
@@ -40,6 +43,7 @@ fn descendant_conversation_ids_in_spawn_order_flattens_nested_children_preorder(
                 terminal_view_id,
                 "follow-up-child".to_string(),
                 child_a,
+                None,
                 ctx,
             )
         });
@@ -48,6 +52,7 @@ fn descendant_conversation_ids_in_spawn_order_flattens_nested_children_preorder(
                 terminal_view_id,
                 "sibling-grandchild".to_string(),
                 child_b,
+                None,
                 ctx,
             )
         });

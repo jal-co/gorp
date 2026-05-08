@@ -66,6 +66,7 @@ fn execute_returns_error_when_child_startup_is_blocked_before_initialization() {
                 terminal_view_id,
                 "Agent 1".to_string(),
                 parent_conversation_id,
+                None,
                 ctx,
             )
         });
@@ -154,6 +155,7 @@ fn execute_resolves_error_when_request_linkage_happens_after_child_already_faile
                 terminal_view_id,
                 "Agent 1".to_string(),
                 parent_conversation_id,
+                None,
                 ctx,
             )
         });
@@ -228,6 +230,7 @@ fn execute_returns_detailed_error_when_child_startup_fails_before_initialization
                 terminal_view_id,
                 "Agent 1".to_string(),
                 parent_conversation_id,
+                None,
                 ctx,
             )
         });
@@ -484,6 +487,7 @@ fn parallel_pendings_each_resolve_independently_via_recorded_child_id() {
                 terminal_view_id,
                 "Agent A".to_string(),
                 parent_conversation_id,
+                None,
                 ctx,
             )
         });
@@ -492,6 +496,7 @@ fn parallel_pendings_each_resolve_independently_via_recorded_child_id() {
                 terminal_view_id,
                 "Agent B".to_string(),
                 parent_conversation_id,
+                None,
                 ctx,
             )
         });
