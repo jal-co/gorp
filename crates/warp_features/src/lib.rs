@@ -955,6 +955,7 @@ pub const DOGFOOD_FLAGS: &[FeatureFlag] = &[
     FeatureFlag::OrchestrationLaunchModal,
     FeatureFlag::NamedAgents,
     FeatureFlag::GitCredentialRefresh,
+    FeatureFlag::HandoffCloudCloud,
 ];
 
 /// Features enabled for feature preview build users (e.g.: Friends of Warp).
