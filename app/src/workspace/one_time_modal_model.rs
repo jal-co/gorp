@@ -73,6 +73,12 @@ impl OneTimeModalModel {
                     {
                         log::warn!("Failed to mark Oz launch modal as dismissed: {e}");
                     }
+                    if let Err(e) = settings
+                        .did_check_to_trigger_orchestration_launch_modal
+                        .set_value(true, ctx)
+                    {
+                        log::warn!("Failed to mark orchestration launch modal as dismissed: {e}");
+                    }
                 });
                 GeneralSettings::handle(ctx).update(ctx, |settings, ctx| {
                     if let Err(e) = settings
