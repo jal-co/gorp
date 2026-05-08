@@ -32,7 +32,13 @@ use super::DEFAULT_AI_BLOCK_HEIGHT;
 /// and the tool call result message timestamp (end).
 struct RunShellCommandResultWithTimestamps {
     result: api::RunShellCommandResult,
+    /// Estimated timestamp when the command started.
+    /// Note that this may not be perfectly accurate, because it may come from the tool call timestamp
+    /// which is when the agent made the tool call, before the command actually started.
     start_ts: Option<DateTime<Local>>,
+    /// Estimated timestamp when the command finished.
+    /// Note that this may not be perfectly accurate, because it may come from the tool call result timestamp
+    /// which is when the server receives the result, after the command actually finished.
     completed_ts: Option<DateTime<Local>>,
 }
 

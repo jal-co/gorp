@@ -101,9 +101,13 @@ pub(crate) struct CommandBlockInfo {
     /// The api message ID that this command block was extracted from.
     /// Used to find the corresponding exchange for timestamp and PWD.
     pub(crate) message_id: String,
-    /// Timestamp from the tool call message (when the command was requested).
+    /// Estimated timestamp when the command started.
+    /// Note that this may not be perfectly accurate, because it may come from the tool call timestamp
+    /// which is when the agent made the tool call, before the command actually started.
     pub(crate) start_ts: Option<DateTime<Local>>,
-    /// Timestamp from the tool call result message (when the command finished).
+    /// Estimated timestamp when the command finished.
+    /// Note that this may not be perfectly accurate, because it may come from the tool call result timestamp
+    /// which is when the server receives the result, after the command actually finished.
     pub(crate) completed_ts: Option<DateTime<Local>>,
 }
 
@@ -3177,6 +3181,11 @@ impl AIConversation {
                         {
                             // Use the tool call message timestamp as the start time,
                             // and the result message timestamp as the completed time.
+                            // Note that this is not perfectly accurate, because the tool call start time
+                            // is when the agent made the tool call, before when the command actually started.
+                            // The tool call result timestamp is also when the server receives the result, after
+                            // the command actually finished.
+                            // Durations are thus longer than in reality.
                             let start_ts = message
                                 .timestamp
                                 .as_ref()
