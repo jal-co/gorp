@@ -3118,6 +3118,42 @@ impl PaneGroup {
         }
     }
 
+    /// Restores hidden child panes if this terminal pane is already showing a
+    /// fullscreen agent view. This covers restored or replaced panes whose
+    /// terminal view entered agent view before pane-group attachment finished.
+    fn restore_missing_child_agent_panes_for_terminal_pane_if_needed(
+        &mut self,
+        pane_id: PaneId,
+        ctx: &mut ViewContext<Self>,
+    ) {
+        let Some(terminal_pane_id) = pane_id.as_terminal_pane_id() else {
+            return;
+        };
+        let Some(parent_conversation_id) = self
+            .terminal_view_from_pane_id(terminal_pane_id, ctx)
+            .and_then(|terminal_view| {
+                let terminal_view = terminal_view.as_ref(ctx);
+                let agent_view_state = terminal_view
+                    .agent_view_controller()
+                    .as_ref(ctx)
+                    .agent_view_state();
+                if agent_view_state.is_fullscreen() {
+                    agent_view_state.active_conversation_id()
+                } else {
+                    None
+                }
+            })
+        else {
+            return;
+        };
+
+        self.restore_missing_child_agent_panes_for_parent(
+            parent_conversation_id,
+            terminal_pane_id.into(),
+            ctx,
+        );
+    }
+
     /// Ensures `child_conversation_id` has a hidden child pane if it still
     /// belongs under a parent conversation in this pane group.
     ///
@@ -4821,6 +4857,10 @@ impl PaneGroup {
                 self.clean_up_pane(original_pane_id, ctx);
                 self.pane_contents.remove(&original_pane_id);
             }
+            self.restore_missing_child_agent_panes_for_terminal_pane_if_needed(
+                replacement_pane_id,
+                ctx,
+            );
 
             // Focus the replacement pane to ensure proper user interaction
             self.focus_pane_by_id(replacement_pane_id, ctx);
@@ -5185,6 +5225,7 @@ impl PaneGroup {
                     self.cleanup_closed_pane(pane_id, ctx);
                     return false;
                 }
+                self.restore_missing_child_agent_panes_for_terminal_pane_if_needed(pane_id, ctx);
 
                 self.focus_pane_and_record_in_history(pane_id, ctx);
 
@@ -6210,6 +6251,7 @@ impl PaneGroup {
             self.pane_contents.remove(&pane_id);
             return None;
         }
+        self.restore_missing_child_agent_panes_for_terminal_pane_if_needed(pane_id, ctx);
 
         if options.focus_new_pane {
             self.focus_pane_and_record_in_history(pane_id, ctx);
@@ -6679,8 +6721,13 @@ impl PaneGroup {
 
     /// Reattach all panes to this group. This is called when a closed tab is restored.
     pub fn reattach_panes(&mut self, ctx: &mut ViewContext<Self>) {
-        for pane in self.pane_contents.values() {
+        let pane_ids = self.pane_contents.keys().copied().collect_vec();
+        for pane_id in pane_ids {
+            let Some(pane) = self.pane_contents.get(&pane_id) else {
+                continue;
+            };
             self.attach_pane(pane.as_ref(), ctx);
+            self.restore_missing_child_agent_panes_for_terminal_pane_if_needed(pane_id, ctx);
         }
     }
 
