@@ -157,6 +157,7 @@ fn error_to_user_message(error: &rmcp::RmcpError) -> String {
             }
             _ => format!("Service error: {}", err),
         },
+        _ => format!("Error: {}", error),
     }
 }
 
@@ -1852,7 +1853,7 @@ async fn spawn_server(
 
                     logger.log("[info] MCP: Using Streaming HTTP transport".to_string());
                     let transport = rmcp::transport::StreamableHttpClientTransport::with_client(
-                        crate::ai::mcp::http_client::McpHttpClient(client.http_client),
+                        crate::ai::mcp::http_client::McpHttpClient(client),
                         rmcp::transport::streamable_http_client::StreamableHttpClientTransportConfig::with_uri(
                             sse_server.url.clone(),
                         ),
@@ -1869,7 +1870,9 @@ async fn spawn_server(
                         let client = if headers.is_empty() {
                             crate::ai::mcp::http_client::McpHttpClient::default()
                         } else {
-                            crate::ai::mcp::http_client::McpHttpClient(build_client_with_headers(&headers)?)
+                            crate::ai::mcp::http_client::McpHttpClient(build_client_with_headers(
+                                &headers,
+                            )?)
                         };
                         rmcp::transport::StreamableHttpClientTransport::with_client(
                             client,
@@ -1890,7 +1893,9 @@ async fn spawn_server(
                         let client = if headers.is_empty() {
                             crate::ai::mcp::http_client::McpHttpClient::default()
                         } else {
-                            crate::ai::mcp::http_client::McpHttpClient(build_client_with_headers(&headers)?)
+                            crate::ai::mcp::http_client::McpHttpClient(build_client_with_headers(
+                                &headers,
+                            )?)
                         };
                         rmcp::transport::StreamableHttpClientTransport::with_client(
                             client,
@@ -1955,7 +1960,7 @@ async fn spawn_server(
 /// The transport to use for MCP.
 enum Transport {
     /// The HTTP transport, with an optional authenticated client.
-    Http(Option<rmcp::transport::auth::AuthClient<crate::ai::mcp::http_client::McpHttpClient>>),
+    Http(Option<reqwest::Client>),
     /// Legacy SSE transport (server responded with 404 to HTTP transport check).
     LegacySse,
 }
@@ -1991,18 +1996,15 @@ async fn determine_transport(
             let spawner = auth_context.spawner.clone();
             // Go through the OAuth flow to get an authenticated client.
             // This will first attempt to use cached credentials before starting interactive OAuth.
-            let (client, did_require_login) = oauth::make_authenticated_client(url, auth_context)
-                .boxed()
-                .await
-                .map_err(rmcp::RmcpError::transport_creation::<ReqwestHttpTransport>)?;
-            let mcp_client = rmcp::transport::auth::AuthClient::new(
-                crate::ai::mcp::http_client::McpHttpClient(client.http_client),
-                client.auth_manager.lock().await.clone(),
-            );
-            let transport = match send_initialize_request(url, headers, Some(&mcp_client)).await? {
-                StatusCode::OK => Ok(Transport::Http(Some(client))),
+            let (auth_client, did_require_login) =
+                oauth::make_authenticated_client(url, auth_context)
+                    .boxed()
+                    .await
+                    .map_err(rmcp::RmcpError::transport_creation::<ReqwestHttpTransport>)?;
+            let transport = match send_initialize_request(url, headers, Some(&auth_client)).await? {
+                StatusCode::OK => Ok(Transport::Http(Some(auth_client.http_client.clone()))),
                 StatusCode::NOT_FOUND | StatusCode::METHOD_NOT_ALLOWED => {
-                    Ok(Transport::Http(Some(client)))
+                    Ok(Transport::Http(Some(auth_client.http_client.clone())))
                 }
                 other => Err(unexpected_error(other)),
             };
@@ -2034,7 +2036,7 @@ async fn determine_transport(
 async fn send_initialize_request(
     url: &str,
     headers: &std::collections::HashMap<String, String>,
-    auth_client: Option<&rmcp::transport::auth::AuthClient<crate::ai::mcp::http_client::McpHttpClient>>,
+    auth_client: Option<&rmcp::transport::auth::AuthClient<reqwest::Client>>,
 ) -> Result<reqwest::StatusCode, rmcp::RmcpError> {
     use rmcp::transport::common::http_header::{EVENT_STREAM_MIME_TYPE, JSON_MIME_TYPE};
 

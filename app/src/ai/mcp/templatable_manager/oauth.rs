@@ -240,7 +240,7 @@ pub async fn make_authenticated_client(
             // If this is a client for which we have a known client secret,
             // update our client config accordingly.
             if let Some(client_secret) = &client_secret {
-            auth_manager.configure_client(
+                auth_manager.configure_client(
                     OAuthClientConfig::new(credentials.client_id.clone(), redirect_uri.clone())
                         .with_client_secret(client_secret.clone()),
                 )?;
@@ -319,7 +319,10 @@ pub async fn make_authenticated_client(
     // For apps for which we have static client IDs (e.g. GitHub), we manually override scopes.
     let mut scopes: &[&str] = &[];
 
-    let config = match auth_manager.register_client("Warp", &redirect_uri, scopes).await {
+    let config = match auth_manager
+        .register_client("Warp", &redirect_uri, scopes)
+        .await
+    {
         Ok(config) => config,
         Err(err @ AuthError::RegistrationFailed(_)) => {
             // If we failed dynamic registration, check to see if this is an auth

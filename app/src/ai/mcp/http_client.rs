@@ -1,7 +1,7 @@
 use std::{borrow::Cow, collections::HashMap, sync::Arc};
 
-use futures::{StreamExt, stream::BoxStream};
-use http::{HeaderName, HeaderValue, header::WWW_AUTHENTICATE};
+use futures::{stream::BoxStream, StreamExt};
+use http::{header::WWW_AUTHENTICATE, HeaderName, HeaderValue};
 use reqwest::header::{HeaderMap, ACCEPT};
 use rmcp::{
     model::{ClientJsonRpcMessage, JsonRpcMessage, ServerJsonRpcMessage},
@@ -65,7 +65,9 @@ fn apply_custom_headers(
     for (name, value) in custom_headers {
         let name_lower = name.as_str().to_lowercase();
         if RESERVED_HEADERS.contains(&name_lower.as_str()) {
-            return Err(StreamableHttpError::ReservedHeaderConflict(name.to_string()));
+            return Err(StreamableHttpError::ReservedHeaderConflict(
+                name.to_string(),
+            ));
         }
         builder = builder.header(name, value);
     }
@@ -107,7 +109,8 @@ impl StreamableHttpClient for McpHttpClient {
         auth_token: Option<String>,
         custom_headers: HashMap<HeaderName, HeaderValue>,
     ) -> Result<BoxStream<'static, Result<Sse, SseError>>, StreamableHttpError<Self::Error>> {
-        let mut request_builder = self.0
+        let mut request_builder = self
+            .0
             .get(uri.as_ref())
             .header(ACCEPT, [EVENT_STREAM_MIME_TYPE, JSON_MIME_TYPE].join(", "))
             .header(HEADER_SESSION_ID, session_id.as_ref());
@@ -181,7 +184,8 @@ impl StreamableHttpClient for McpHttpClient {
         auth_token: Option<String>,
         custom_headers: HashMap<HeaderName, HeaderValue>,
     ) -> Result<StreamableHttpPostResponse, StreamableHttpError<Self::Error>> {
-        let mut request = self.0
+        let mut request = self
+            .0
             .post(uri.as_ref())
             .header(ACCEPT, [EVENT_STREAM_MIME_TYPE, JSON_MIME_TYPE].join(", "));
         if let Some(auth_header) = auth_token {
@@ -207,9 +211,9 @@ impl StreamableHttpClient for McpHttpClient {
                         ))
                     })?
                     .to_string();
-                return Err(StreamableHttpError::AuthRequired(
-                    AuthRequiredError::new(header),
-                ));
+                return Err(StreamableHttpError::AuthRequired(AuthRequiredError::new(
+                    header,
+                )));
             }
         }
         if response.status() == reqwest::StatusCode::FORBIDDEN {
