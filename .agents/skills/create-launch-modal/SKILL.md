@@ -1,11 +1,11 @@
 ---
 name: create-launch-modal
-description: Create a one-time Phenomenon-styled launch modal in the Warp client (feature announcement, onboarding, etc.). Use when adding a new modal that should appear exactly once per user on startup, gated by a feature flag.
+description: Create a one-time launch modal in the Warp client (feature announcement, onboarding, etc.). Use when adding a new modal that should appear exactly once per user on startup, gated by a feature flag.
 ---
 
 # create-launch-modal
 
-Create a one-time Phenomenon-styled launch modal — the dark-background modal design used for feature announcements like "Orchestrate any agent, anywhere" or "Warp is now open-source."
+Create a one-time launch modal — the dark-background design used for feature announcements like "Orchestrate any agent, anywhere" or "Warp is now open-source."
 
 ## Reference implementation
 
@@ -237,7 +237,7 @@ fn render_badge(appearance: &Appearance) -> Box<dyn Element> {
 }
 ```
 
-Badge colors are defined in `crates/warp_core/src/ui/theme/phenomenon.rs` as `PHENOMENON_MODAL_BADGE_BACKGROUND` (`#BF409D` at 10% alpha) and `PHENOMENON_MODAL_BADGE_TEXT` (`#BF409D` opaque). The base color is also available as `warp_core::ui::color::MAGENTA`.
+Badge colors come from `PhenomenonStyle` in `crates/warp_core/src/ui/theme/phenomenon.rs` — a pre-existing module that defines the color palette for these dark modals (named after the Warp "Phenomenon" built-in theme, not something we own). `modal_badge_background` is `#BF409D` at 10% alpha; `modal_badge_text` is `#BF409D` opaque. The hex value is also available as `warp_core::ui::color::MAGENTA`.
 
 ### URLs
 
