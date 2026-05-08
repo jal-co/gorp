@@ -20,13 +20,12 @@ use crate::view_components::action_button::{ActionButton, ActionButtonTheme, But
 const MODAL_WIDTH: f32 = 420.;
 const HERO_HEIGHT: f32 = 92.;
 const HERO_IMAGE_PATH: &str = "async/png/onboarding/orchestration_launch_banner.png";
-const LEARN_MORE_URL: &str = "http://warp.dev/placeholder-launch-blog-link";
+const LEARN_MORE_URL: &str = "https://warp.dev/placeholder-launch-blog-link";
 
 struct FeatureItem {
     icon: Icon,
     title: &'static str,
     description: &'static str,
-    /// Optional badge rendered next to the title (e.g. "Research preview").
     badge: Option<&'static str>,
 }
 
