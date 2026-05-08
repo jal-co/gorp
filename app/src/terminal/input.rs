@@ -963,6 +963,10 @@ pub enum Event {
     SyncInput(SyncInputType),
     ShowCommandSearch(CommandSearchOptions),
     CtrlD,
+    /// Emitted when the user presses ctrl-r and fzf's history widget is available.
+    /// The terminal view should write the raw ctrl-r byte (\x12) to the PTY so the
+    /// shell's line editor invokes fzf.
+    FzfCtrlR,
     CtrlC {
         // The number of chars cleared from the buffer, if the ctrl-c triggered a buffer clear.
         cleared_buffer_len: usize,
@@ -10469,7 +10473,19 @@ impl Input {
                     input_suggestions.select_prev(ctx);
                 });
         } else if !self.ai_input_model.as_ref(ctx).is_ai_input_enabled() {
-            self.fuzzy_history_search(ctx);
+            // If fzf's ctrl-r history widget is available, delegate to the shell's
+            // line editor instead of opening Warp's command search. The shell's
+            // wrapper widget will invoke fzf and report the selected command back
+            // via the InputBuffer hook.
+            let has_fzf = self
+                .active_session(ctx)
+                .map(|session| session.shell().has_fzf_ctrl_r())
+                .unwrap_or(false);
+            if has_fzf {
+                ctx.emit(Event::FzfCtrlR);
+            } else {
+                self.fuzzy_history_search(ctx);
+            }
         }
     }
 
