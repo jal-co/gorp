@@ -322,6 +322,52 @@ fn install_script_avoids_pattern_substitution_for_tilde_expansion() {
 }
 
 #[test]
+fn parse_uname_linux_amd64() {
+    let platform = parse_uname_output("Linux amd64").unwrap();
+    assert_eq!(platform.os, RemoteOs::Linux);
+    assert_eq!(platform.arch, RemoteArch::X86_64);
+}
+
+#[test]
+fn parse_uname_unsupported_armv7l() {
+    let result = parse_uname_output("Linux armv7l");
+    match result {
+        Err(crate::transport::Error::UnsupportedArch { arch }) => {
+            assert_eq!(arch, "armv7l");
+        }
+        other => panic!("expected UnsupportedArch, got {other:?}"),
+    }
+}
+
+#[test]
+fn install_script_contains_no_tar_exit_code() {
+    let script = install_script(None);
+    // The template placeholder {no_tar_exit_code} should be replaced with
+    // the numeric value of NO_TAR_EXIT_CODE.
+    let expected = format!("exit {}", NO_TAR_EXIT_CODE);
+    assert!(
+        script.contains(&expected),
+        "install script should contain 'exit {val}' for NO_TAR_EXIT_CODE, \
+         but it was not found. Searched for: {expected}",
+        val = NO_TAR_EXIT_CODE,
+    );
+    // The raw placeholder must not survive substitution.
+    assert!(
+        !script.contains("{no_tar_exit_code}"),
+        "install script still contains the raw {{no_tar_exit_code}} placeholder",
+    );
+}
+
+#[test]
+fn install_script_contains_tar_pre_check() {
+    let script = install_script(None);
+    assert!(
+        script.contains("command -v tar"),
+        "install script should contain a tar availability check",
+    );
+}
+
+#[test]
 fn parse_preinstall_missing_status_falls_open() {
     // Garbled / partial script output — missing status field. Confirms
     // the fail-open invariant: anything we can't positively classify as

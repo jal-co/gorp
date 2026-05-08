@@ -270,7 +270,7 @@ pub fn parse_uname_output(
     };
 
     let arch = match arch_str {
-        "x86_64" => RemoteArch::X86_64,
+        "x86_64" | "amd64" => RemoteArch::X86_64,
         "aarch64" | "arm64" | "armv8l" => RemoteArch::Aarch64,
         other => {
             return Err(Error::UnsupportedArch {
@@ -433,6 +433,7 @@ pub fn install_script(staging_tarball_path: Option<&str>) -> String {
             "{no_http_client_exit_code}",
             &NO_HTTP_CLIENT_EXIT_CODE.to_string(),
         )
+        .replace("{no_tar_exit_code}", &NO_TAR_EXIT_CODE.to_string())
         .replace("{staging_tarball_path}", staging_tarball_path.unwrap_or(""))
 }
 
@@ -492,6 +493,10 @@ pub fn download_tarball_url(platform: &RemotePlatform) -> String {
 /// available on the remote host. The Rust side matches on this to
 /// trigger the SCP upload fallback.
 pub const NO_HTTP_CLIENT_EXIT_CODE: i32 = 3;
+
+/// Exit code the install script uses when `tar` is not available.
+/// The Rust side matches on this to trigger the gzip SCP fallback.
+pub const NO_TAR_EXIT_CODE: i32 = 4;
 
 /// Timeout for the binary existence check.
 pub const CHECK_TIMEOUT: Duration = Duration::from_secs(10);
