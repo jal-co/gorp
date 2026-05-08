@@ -1,0 +1,4 @@
+Hello, World!
+
+This file was created as a test to verify git credentials remain valid after long durations.
+Created: 2026-05-08
