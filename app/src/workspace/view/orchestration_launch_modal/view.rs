@@ -3,13 +3,12 @@ use pathfinder_geometry::vector::vec2f;
 use warp_core::ui::theme::{phenomenon::PhenomenonStyle, Fill};
 use warpui::assets::asset_cache::AssetSource;
 use warpui::elements::{
-    Align, CacheOption, ChildAnchor, ChildView, ConstrainedBox, Container, CornerRadius,
-    CrossAxisAlignment, Expanded, Flex, Hoverable, Image, MainAxisSize, MouseStateHandle,
-    OffsetPositioning, ParentAnchor, ParentElement, ParentOffsetBounds, Radius, Stack, Text,
+    Align, CacheOption, ChildAnchor, ChildView, Clipped, ConstrainedBox, Container, CornerRadius,
+    CrossAxisAlignment, Expanded, Flex, Image, MainAxisSize, OffsetPositioning, ParentAnchor,
+    ParentElement, ParentOffsetBounds, Radius, Stack, Text,
 };
 use warpui::fonts::{Properties, Weight};
 use warpui::keymap::FixedBinding;
-use warpui::platform::Cursor;
 use warpui::{
     AppContext, Element, Entity, SingletonEntity, TypedActionView, View, ViewContext, ViewHandle,
 };
@@ -20,10 +19,8 @@ use crate::view_components::action_button::{ActionButton, ActionButtonTheme, But
 
 const MODAL_WIDTH: f32 = 420.;
 const HERO_HEIGHT: f32 = 92.;
-// TODO: Replace with actual hero image once provided.
-const HERO_IMAGE_PATH: &str = "async/png/onboarding/openwarp_launch_banner.png";
+const HERO_IMAGE_PATH: &str = "async/png/onboarding/orchestration_launch_banner.png";
 const LEARN_MORE_URL: &str = "http://warp.dev/placeholder-launch-blog-link";
-const AGENT_MEMORY_URL: &str = "https://www.warp.dev/oz/agent-memory";
 
 struct FeatureItem {
     icon: Icon,
@@ -31,7 +28,6 @@ struct FeatureItem {
     description: &'static str,
     /// Optional badge rendered next to the title (e.g. "Research preview").
     badge: Option<&'static str>,
-    badge_url: Option<&'static str>,
 }
 
 const FEATURE_ITEMS: &[FeatureItem] = &[
@@ -40,21 +36,18 @@ const FEATURE_ITEMS: &[FeatureItem] = &[
         title: "Run any agent harness in the cloud",
         description: "Use Oz to spin up Claude Code or Codex agents in the cloud; Oz will help you track and steer the agents.",
         badge: None,
-        badge_url: None,
     },
     FeatureItem {
-        icon: Icon::Dataflow02,
+        icon: Icon::Atom02,
         title: "Multi-agent orchestration",
         description: "Warp Agents will now orchestrate subagents automatically, deploying and tracking parallel agents.",
         badge: None,
-        badge_url: None,
     },
     FeatureItem {
-        icon: Icon::Neurology,
+        icon: Icon::Cognition,
         title: "Agent Memory",
         description: "Agents will now store and access long-term memories, enabling self-improvement over time.",
         badge: Some("Research preview"),
-        badge_url: Some(AGENT_MEMORY_URL),
     },
 ];
 
@@ -100,6 +93,31 @@ impl ActionButtonTheme for CloseButtonTheme {
     }
 }
 
+struct LearnMoreButtonTheme;
+
+impl ActionButtonTheme for LearnMoreButtonTheme {
+    fn background(&self, hovered: bool, _appearance: &Appearance) -> Option<Fill> {
+        if hovered {
+            Some(Fill::Solid(PhenomenonStyle::subtle_border()))
+        } else {
+            None
+        }
+    }
+
+    fn text_color(
+        &self,
+        _hovered: bool,
+        _background: Option<Fill>,
+        _appearance: &Appearance,
+    ) -> ColorU {
+        PhenomenonStyle::modal_feature_title_text()
+    }
+
+    fn border(&self, _appearance: &Appearance) -> Option<ColorU> {
+        Some(PhenomenonStyle::subtle_border())
+    }
+}
+
 struct CtaButtonTheme;
 
 impl ActionButtonTheme for CtaButtonTheme {
@@ -119,8 +137,8 @@ impl ActionButtonTheme for CtaButtonTheme {
 
 pub struct OrchestrationLaunchModal {
     close_button: ViewHandle<ActionButton>,
-    cta_button: ViewHandle<ActionButton>,
-    research_preview_mouse: MouseStateHandle,
+    learn_more_button: ViewHandle<ActionButton>,
+    go_to_warp_button: ViewHandle<ActionButton>,
 }
 
 impl OrchestrationLaunchModal {
@@ -132,36 +150,46 @@ impl OrchestrationLaunchModal {
                 .on_click(|ctx| ctx.dispatch_typed_action(OrchestrationLaunchModalAction::Close))
         });
 
-        let cta_button = ctx.add_view(|_ctx| {
-            ActionButton::new("Learn more", CtaButtonTheme)
+        let learn_more_button = ctx.add_view(|_ctx| {
+            ActionButton::new("Learn more", LearnMoreButtonTheme)
+                .with_icon(Icon::LinkExternal)
                 .with_full_width(true)
                 .on_click(|ctx| {
                     ctx.dispatch_typed_action(OrchestrationLaunchModalAction::LearnMore)
                 })
         });
 
+        let go_to_warp_button = ctx.add_view(|_ctx| {
+            ActionButton::new("Go to Warp", CtaButtonTheme)
+                .with_full_width(true)
+                .on_click(|ctx| ctx.dispatch_typed_action(OrchestrationLaunchModalAction::Close))
+        });
+
         Self {
             close_button,
-            cta_button,
-            research_preview_mouse: Default::default(),
+            learn_more_button,
+            go_to_warp_button,
         }
     }
 
     fn render_hero(&self) -> Box<dyn Element> {
-        let hero = ConstrainedBox::new(
-            Image::new(
-                AssetSource::Bundled {
-                    path: HERO_IMAGE_PATH,
-                },
-                CacheOption::Original,
+        let hero = Clipped::new(
+            ConstrainedBox::new(
+                Image::new(
+                    AssetSource::Bundled {
+                        path: HERO_IMAGE_PATH,
+                    },
+                    CacheOption::Original,
+                )
+                .with_corner_radius(CornerRadius::with_top(Radius::Pixels(8.)))
+                .cover()
+                .top_aligned()
+                .finish(),
             )
-            .with_corner_radius(CornerRadius::with_top(Radius::Pixels(8.)))
-            .cover()
-            .top_aligned()
+            .with_width(MODAL_WIDTH)
+            .with_height(HERO_HEIGHT)
             .finish(),
         )
-        .with_width(MODAL_WIDTH)
-        .with_height(HERO_HEIGHT)
         .finish();
 
         let close_el = Container::new(ChildView::new(&self.close_button).finish())
@@ -184,16 +212,7 @@ impl OrchestrationLaunchModal {
     }
 
     fn render_badge(appearance: &Appearance) -> Box<dyn Element> {
-        Container::new(
-            Text::new_inline("New".to_string(), appearance.ui_font_family(), 14.)
-                .with_color(PhenomenonStyle::modal_badge_text())
-                .finish(),
-        )
-        .with_horizontal_padding(8.)
-        .with_vertical_padding(2.)
-        .with_corner_radius(CornerRadius::with_all(Radius::Pixels(4.)))
-        .with_background(Fill::Solid(PhenomenonStyle::modal_badge_background()))
-        .finish()
+        crate::workspace::view::phenomenon_badge::render_new_badge(appearance)
     }
 
     fn render_title(appearance: &Appearance) -> Box<dyn Element> {
@@ -217,41 +236,19 @@ impl OrchestrationLaunchModal {
         .finish()
     }
 
-    fn render_feature_badge(
-        label: &'static str,
-        appearance: &Appearance,
-        link: Option<(MouseStateHandle, &'static str)>,
-    ) -> Box<dyn Element> {
+    fn render_feature_badge(label: &'static str, appearance: &Appearance) -> Box<dyn Element> {
         let font_family = appearance.ui_font_family();
         let color = PhenomenonStyle::modal_feature_description_text();
-        if let Some((mouse, url)) = link {
-            Hoverable::new(mouse, move |_state| {
-                Container::new(
-                    Text::new_inline(label.to_string(), font_family, 11.)
-                        .with_color(color)
-                        .finish(),
-                )
-                .with_horizontal_padding(6.)
-                .with_vertical_padding(2.)
-                .with_corner_radius(CornerRadius::with_all(Radius::Pixels(4.)))
-                .with_background(Fill::Solid(color).with_opacity(15))
-                .finish()
-            })
-            .with_cursor(Cursor::PointingHand)
-            .on_click(move |_, app_ctx, _| app_ctx.open_url(url))
-            .finish()
-        } else {
-            Container::new(
-                Text::new_inline(label.to_string(), font_family, 11.)
-                    .with_color(color)
-                    .finish(),
-            )
-            .with_horizontal_padding(6.)
-            .with_vertical_padding(2.)
-            .with_corner_radius(CornerRadius::with_all(Radius::Pixels(4.)))
-            .with_background(Fill::Solid(color).with_opacity(15))
-            .finish()
-        }
+        Container::new(
+            Text::new_inline(label.to_string(), font_family, 11.)
+                .with_color(color)
+                .finish(),
+        )
+        .with_horizontal_padding(6.)
+        .with_vertical_padding(2.)
+        .with_corner_radius(CornerRadius::with_all(Radius::Pixels(4.)))
+        .with_background(Fill::Solid(color).with_opacity(15))
+        .finish()
     }
 
     fn render_feature_row(&self, item: &FeatureItem, appearance: &Appearance) -> Box<dyn Element> {
@@ -275,10 +272,7 @@ impl OrchestrationLaunchModal {
                 .finish(),
         );
         if let Some(badge_label) = item.badge {
-            let link = item
-                .badge_url
-                .map(|url| (self.research_preview_mouse.clone(), url));
-            title_row.add_child(Self::render_feature_badge(badge_label, appearance, link));
+            title_row.add_child(Self::render_feature_badge(badge_label, appearance));
         }
 
         let text_col = Flex::column()
@@ -308,7 +302,16 @@ impl OrchestrationLaunchModal {
             features_col.add_child(self.render_feature_row(item, appearance));
         }
 
-        let cta = ChildView::new(&self.cta_button).finish();
+        let footer = Flex::row()
+            .with_cross_axis_alignment(CrossAxisAlignment::Center)
+            .with_spacing(8.)
+            .with_child(
+                Expanded::new(1., ChildView::new(&self.learn_more_button).finish()).finish(),
+            )
+            .with_child(
+                Expanded::new(1., ChildView::new(&self.go_to_warp_button).finish()).finish(),
+            )
+            .finish();
 
         Container::new(
             Flex::column()
@@ -327,7 +330,7 @@ impl OrchestrationLaunchModal {
                         .with_margin_top(16.)
                         .finish(),
                 )
-                .with_child(Container::new(cta).with_margin_top(32.).finish())
+                .with_child(Container::new(footer).with_margin_top(32.).finish())
                 .finish(),
         )
         .with_horizontal_padding(32.)
@@ -386,7 +389,6 @@ impl TypedActionView for OrchestrationLaunchModal {
             }
             OrchestrationLaunchModalAction::LearnMore => {
                 ctx.open_url(LEARN_MORE_URL);
-                ctx.emit(OrchestrationLaunchModalEvent::Close);
             }
         }
     }

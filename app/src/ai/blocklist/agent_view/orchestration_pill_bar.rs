@@ -475,8 +475,11 @@ pub fn render_static_agent_pill(name: &str, app: &AppContext) -> Box<dyn Element
     let appearance = Appearance::as_ref(app);
     let theme = appearance.theme();
     let avatar = render_agent_avatar_disc(name, AVATAR_SIZE, theme, appearance);
+    // Fixed magenta design-token colors (--magenta_overlay_1 / #BF409D).
+    let text_color = warp_core::ui::color::MAGENTA;
+    let bg_color = coloru_with_opacity(text_color, 10);
     let label_text = Text::new(name.to_string(), appearance.ui_font_family(), 12.)
-        .with_color(internal_colors::text_main(theme, theme.background()))
+        .with_color(text_color)
         .soft_wrap(false)
         .with_clip(ClipConfig::ellipsis())
         .finish();
@@ -497,7 +500,7 @@ pub fn render_static_agent_pill(name: &str, app: &AppContext) -> Box<dyn Element
         Container::new(row)
             .with_padding_left(PILL_HORIZONTAL_PADDING_LEFT)
             .with_padding_right(PILL_HORIZONTAL_PADDING_RIGHT)
-            .with_background_color(internal_colors::fg_overlay_2(theme).into())
+            .with_background_color(bg_color)
             .with_corner_radius(CornerRadius::with_all(Radius::Pixels(PILL_RADIUS)))
             .finish(),
     )

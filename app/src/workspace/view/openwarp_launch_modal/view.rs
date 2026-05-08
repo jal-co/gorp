@@ -190,16 +190,7 @@ impl OpenWarpLaunchModal {
     }
 
     fn render_badge(appearance: &Appearance) -> Box<dyn Element> {
-        Container::new(
-            Text::new_inline("New".to_string(), appearance.ui_font_family(), 14.)
-                .with_color(PhenomenonStyle::modal_badge_text())
-                .finish(),
-        )
-        .with_horizontal_padding(8.)
-        .with_vertical_padding(2.)
-        .with_corner_radius(CornerRadius::with_all(Radius::Pixels(4.)))
-        .with_background(Fill::Solid(PhenomenonStyle::modal_badge_background()))
-        .finish()
+        crate::workspace::view::phenomenon_badge::render_new_badge(appearance)
     }
 
     fn render_title(appearance: &Appearance) -> Box<dyn Element> {

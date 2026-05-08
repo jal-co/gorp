@@ -11,6 +11,7 @@ pub(crate) mod left_panel;
 pub(crate) mod onboarding;
 pub(crate) mod openwarp_launch_modal;
 pub(crate) mod orchestration_launch_modal;
+pub(crate) mod phenomenon_badge;
 pub(crate) mod right_panel;
 mod startup_directory;
 #[cfg(test)]
