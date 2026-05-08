@@ -68,6 +68,30 @@ fn descendant_conversation_ids_in_spawn_order_flattens_nested_children_preorder(
 }
 
 #[test]
+fn navigation_action_for_child_pill_reveals_existing_child_pane() {
+    let conversation_id = AIConversationId::new();
+
+    assert!(matches!(
+        navigation_action_for_pill(PillKind::Child, conversation_id),
+        TerminalAction::RevealChildAgent {
+            conversation_id: actual_id,
+        } if actual_id == conversation_id
+    ));
+}
+
+#[test]
+fn navigation_action_for_orchestrator_pill_switches_in_place() {
+    let conversation_id = AIConversationId::new();
+
+    assert!(matches!(
+        navigation_action_for_pill(PillKind::Orchestrator, conversation_id),
+        TerminalAction::SwitchAgentViewToConversation {
+            conversation_id: actual_id,
+        } if actual_id == conversation_id
+    ));
+}
+
+#[test]
 fn descendant_conversation_ids_in_spawn_order_returns_empty_without_children() {
     App::test((), |mut app| async move {
         let terminal_view_id = EntityId::new();

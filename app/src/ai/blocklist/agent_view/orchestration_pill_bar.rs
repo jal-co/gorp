@@ -552,10 +552,9 @@ impl OrchestrationPillBar {
         // `ActiveAgentViewsModel` (via `TerminalPane::attach` when the
         // orchestrator's `StartAgentExecutor` creates the hidden child pane
         // through `create_hidden_child_agent_conversation`). That makes the
-        // naive check fire for every child — swapping every avatar for the
-        // pin glyph and routing every click through `RevealChildAgent`
-        // instead of `SwitchAgentViewToConversation`, which broke the
-        // expected in-place switching.
+        // naive check fire for every child and falsely replaces every avatar
+        // with the pin glyph, even when the only extra owner is the hidden
+        // bootstrap pane the user has never explicitly opened.
         //
         // Restoring real pin detection requires plumbing pane visibility
         // (visible vs. hidden-for-child-agent) into `ActiveAgentViewsModel`,
@@ -1317,6 +1316,20 @@ fn render_chip(
         .finish()
 }
 
+fn navigation_action_for_pill(kind: PillKind, conversation_id: AIConversationId) -> TerminalAction {
+    match kind {
+        // The orchestrator pill is the "home" conversation for the tree, so
+        // navigating back to it should switch the current pane's agent view.
+        PillKind::Orchestrator => TerminalAction::SwitchAgentViewToConversation { conversation_id },
+        // Child conversations already have a dedicated hidden pane/session
+        // created at StartAgent time. Revealing that pane keeps any live
+        // harness session, CLI listener, ambient-agent session state, and PTY
+        // output attached to the real owner instead of trying to recreate the
+        // child transcript in the current pane.
+        PillKind::Child => TerminalAction::RevealChildAgent { conversation_id },
+    }
+}
+
 fn render_pill(
     spec: PillSpec,
     mouse_state: MouseStateHandle,
@@ -1507,7 +1520,6 @@ fn render_pill(
         if is_selected {
             return;
         }
-        let _ = kind;
         // Single source of truth: if the conversation is currently owned
         // by a *different* visible terminal view than this orchestrator
         // pane (because it was split off into a separate pane or tab),
@@ -1526,18 +1538,18 @@ fn render_pill(
             ));
             return;
         }
-        // Pinned pills focus the existing pane/tab that already hosts this
-        // child agent (via `RevealChildAgent`, which the pane group treats
-        // as a request to show + focus an existing child pane). Unpinned
-        // pills navigate the *current* pane in place via
-        // `SwitchAgentViewToConversation`. Both paths bubble through
-        // `PaneHeaderAction::CustomAction` because the pill bar lives
-        // inside the pane header chrome (mirrors `agent_view_back_button`).
-        let action = if is_pinned {
-            TerminalAction::RevealChildAgent { conversation_id }
-        } else {
-            TerminalAction::SwitchAgentViewToConversation { conversation_id }
-        };
+        // Child pills should reveal the existing child pane/session, not
+        // switch the current pane in place. The hidden child pane owns the
+        // live harness/ambient session and associated view-scoped models; if
+        // we merely re-enter the child conversation in the current pane, the
+        // actual running session stays attached to the hidden pane and the
+        // user sees an empty child view. The orchestrator pill still switches
+        // the current pane back to the parent conversation.
+        //
+        // We keep the visible-owner fast path above so a child that's already
+        // open in another visible pane/tab still focuses that existing
+        // destination rather than trying to reveal the hidden bootstrap pane.
+        let action = navigation_action_for_pill(kind, conversation_id);
         ctx.dispatch_typed_action(
             PaneHeaderAction::<TerminalAction, TerminalAction>::CustomAction(action),
         );
