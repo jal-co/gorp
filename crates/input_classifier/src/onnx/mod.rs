@@ -38,7 +38,7 @@ impl Model {
 
     fn model_path(&self) -> &'static str {
         match self {
-            Model::BertTiny => "bert_tiny.onnx",
+            Model::BertTiny => "bert_tiny_2026May.onnx",
         }
     }
 
