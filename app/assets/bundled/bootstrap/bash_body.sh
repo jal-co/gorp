@@ -1274,12 +1274,16 @@ esac
     # function that invokes __fzf_history__ and then reports READLINE_LINE back
     # to Warp via the InputBuffer hook.
     warp_has_fzf_ctrl_r=""
-    if ((BASH_VERSINFO[0] >= 4)); then
-        # On bash >= 4, fzf uses `bind -x` to bind __fzf_history__ to \C-r.
-        # Check if that binding exists.
-        if bind -x '"\C-r"' 2>/dev/null | command -p grep -q '__fzf_history__' 2>/dev/null; then
-            warp_has_fzf_ctrl_r="1"
+    # Detect fzf's ctrl-r by checking if the __fzf_history__ function exists.
+    # We use `declare -f` instead of inspecting bind output because `bind -X`
+    # only works in the current interactive shell — pipes and subshells lose
+    # readline state, making bind-based detection unreliable.
+    if declare -f __fzf_history__ >/dev/null 2>&1; then
+        warp_has_fzf_ctrl_r="1"
 
+        if ((BASH_VERSINFO[0] >= 4)); then
+            # On bash >= 4, fzf uses `bind -x` so we can wrap the binding with
+            # a function that reports READLINE_LINE back to Warp.
             __warp_fzf_history__() {
                 __fzf_history__
                 # Report the resulting READLINE_LINE back to Warp.
@@ -1290,13 +1294,8 @@ esac
             bind -m vi-command -x '"\C-r": __warp_fzf_history__'
             bind -m vi-insert -x '"\C-r": __warp_fzf_history__'
         fi
-    else
-        # On bash < 4, fzf uses macro-style bind. Check if \C-r contains __fzf_history__.
-        if bind -p 2>/dev/null | command -p grep -q '__fzf_history__' 2>/dev/null; then
-            warp_has_fzf_ctrl_r="1"
-            # We can't easily wrap macro-style bindings, so just flag it for detection.
-            # The user will get fzf's native behavior without buffer reporting.
-        fi
+        # On bash < 4, fzf uses macro-style bindings which we can't easily wrap,
+        # but we still flag it so Warp delegates ctrl-r to the shell.
     fi
 
     function warp_bootstrapped () {
