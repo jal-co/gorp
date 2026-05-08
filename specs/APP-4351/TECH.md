@@ -81,7 +81,7 @@ No new state enum — the existing `DiffState` has the right variants (`NotInRep
 
 ### 3. Server-side GlobalDiffStateModel
 
-New file: `app/src/remote_server/diff_state_server.rs`.
+New file: `app/src/remote_server/diff_state_tracker.rs`.
 
 ```rust path=null start=null
 #[derive(Hash, Eq, PartialEq, Clone)]
