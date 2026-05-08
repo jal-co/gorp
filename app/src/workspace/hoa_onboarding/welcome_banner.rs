@@ -85,7 +85,24 @@ pub fn render_welcome_banner(
     );
 
     // "New" badge
-    let badge = crate::workspace::view::phenomenon_badge::render_new_badge(appearance);
+    let text = Text::new_inline("New".to_string(), appearance.ui_font_family(), 14.)
+        .with_color(PhenomenonStyle::modal_badge_text())
+        .finish();
+    let badge = ConstrainedBox::new(
+        Container::new(
+            Flex::row()
+                .with_cross_axis_alignment(CrossAxisAlignment::Center)
+                .with_main_axis_size(MainAxisSize::Min)
+                .with_child(text)
+                .finish(),
+        )
+        .with_horizontal_padding(8.)
+        .with_background(Fill::Solid(PhenomenonStyle::modal_badge_background()))
+        .with_corner_radius(CornerRadius::with_all(Radius::Percentage(50.)))
+        .finish(),
+    )
+    .with_height(24.)
+    .finish();
 
     // Title
     let title = Text::new(
