@@ -4597,6 +4597,83 @@ impl PaneGroup {
         }
     }
 
+    /// Permanently discards the pane backing a child agent conversation. Unlike
+    /// `close_pane`, this does not preserve child panes off-tree for later
+    /// reveals; it is used by the Kill action.
+    pub fn discard_child_agent_pane_for_conversation(
+        &mut self,
+        conversation_id: AIConversationId,
+        ctx: &mut ViewContext<Self>,
+    ) -> bool {
+        let tracked_child_pane = self.child_agent_panes.remove(&conversation_id);
+        let split_off_child_pane = self.child_agent_origin.as_ref().and_then(|origin| {
+            (origin.conversation_id == conversation_id)
+                .then(|| self.pane_id_for_conversation_owner(conversation_id, ctx))
+                .flatten()
+        });
+        let owner_child_pane = tracked_child_pane
+            .or(split_off_child_pane)
+            .or_else(|| self.pane_id_for_conversation_owner(conversation_id, ctx));
+        let Some(child_pane_id) = owner_child_pane else {
+            return false;
+        };
+
+        if self
+            .child_agent_origin
+            .as_ref()
+            .is_some_and(|origin| origin.conversation_id == conversation_id)
+        {
+            // A killed split-off tab must not be re-adopted by the source tab
+            // when the workspace removes it.
+            self.child_agent_origin = None;
+        }
+
+        let was_focused = self.focus_state.as_ref(ctx).is_pane_focused(child_pane_id);
+
+        if let Some(terminal_view) = self.terminal_view_from_pane_id(child_pane_id, ctx) {
+            terminal_view.update(ctx, |view, ctx| {
+                view.clear_orchestration_split_off(ctx);
+                view.shutdown_pty(ctx);
+            });
+        }
+
+        if let Some(original_pane_id) = self.panes.original_pane_for_replacement(child_pane_id) {
+            self.panes.revert_temporary_replacement(child_pane_id);
+            if was_focused {
+                self.focus_pane(original_pane_id, true, ctx);
+            }
+        } else {
+            // If the killed child was the original side of an active swap, keep
+            // the replacement visible and drop the hidden original entry so a
+            // later revert cannot resurrect the killed pane.
+            self.panes.remove_hidden_pane(child_pane_id);
+        }
+
+        let is_in_tree = self.panes.is_pane_in_tree(child_pane_id);
+        if is_in_tree && self.panes.visible_pane_count() <= 1 {
+            // PaneData cannot represent an empty root. For a lone split-off
+            // child tab, ask the workspace to remove the tab instead; the pane
+            // group is about to be dropped and the conversation has already
+            // been removed by the caller.
+            ctx.emit(Event::Exited {
+                add_to_undo_stack: false,
+            });
+            return true;
+        }
+
+        if is_in_tree {
+            self.focus_next_terminal_pane_and_activate_session(
+                child_pane_id,
+                PaneRemovalReason::Close,
+                ctx,
+            );
+        }
+
+        let discarded = self.cleanup_closed_pane(child_pane_id, ctx);
+        self.handle_pane_count_change(ctx);
+        discarded
+    }
+
     pub fn close_pane(&mut self, pane_id: PaneId, ctx: &mut ViewContext<Self>) {
         // Don't close a pane that doesn't exist
         if !self.pane_contents.contains_key(&pane_id) {

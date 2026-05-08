@@ -188,6 +188,10 @@ pub struct OrchestrationEventStreamer {
     /// Monotonic counter for wake-only listener generations. Ensures stale
     /// callbacks from replaced listeners are discarded.
     next_wake_generation: u64,
+    /// Run IDs explicitly killed by the local user. We keep these after the
+    /// conversation is removed so parent SSE streams can observe and discard
+    /// late server events instead of re-delivering or resurrecting the child.
+    killed_run_ids: HashMap<String, AIConversationId>,
 }
 
 pub enum OrchestrationEventStreamerEvent {
@@ -215,6 +219,7 @@ impl OrchestrationEventStreamer {
             streams: HashMap::new(),
             next_sse_generation: 0,
             next_wake_generation: 0,
+            killed_run_ids: HashMap::new(),
         }
     }
 
@@ -237,10 +242,26 @@ impl OrchestrationEventStreamer {
             streams: HashMap::new(),
             next_sse_generation: 0,
             next_wake_generation: 0,
+            killed_run_ids: HashMap::new(),
         }
     }
 
     // ---- Public consumer registry API ---------------------------------
+
+    pub fn mark_conversation_killed(
+        &mut self,
+        conversation_id: AIConversationId,
+        ctx: &mut ModelContext<Self>,
+    ) {
+        let Some(run_id) = self.self_run_id(conversation_id, ctx) else {
+            log::info!("mark_conversation_killed: conversation {conversation_id:?} has no run_id");
+            return;
+        };
+        log::info!(
+            "Marking orchestration run as killed: conversation_id={conversation_id:?} run_id={run_id}"
+        );
+        self.killed_run_ids.insert(run_id, conversation_id);
+    }
 
     /// Register a consumer for a conversation. Re-evaluates eligibility
     /// and opens the SSE connection if the conversation is newly
@@ -581,6 +602,17 @@ impl OrchestrationEventStreamer {
         // Prune the removed conversation's run_id from every other
         // tracked conversation's watched set, then re-evaluate eligibility
         // for the affected parents.
+        let removed_run_is_killed = removed_run_id
+            .as_deref()
+            .is_some_and(|run_id| self.killed_run_ids.contains_key(run_id));
+        if removed_run_is_killed {
+            log::info!(
+                "Keeping killed run_id {:?} in parent watcher sets so future events can be dropped",
+                removed_run_id
+            );
+            return;
+        }
+
         if let Some(run_id) = removed_run_id.as_deref() {
             let mut affected = Vec::new();
             for (other_id, stream) in self.streams.iter_mut() {
@@ -1278,6 +1310,24 @@ impl OrchestrationEventStreamer {
             );
         }
 
+        let mut events = events;
+        let mut messages = messages;
+        if !self.killed_run_ids.is_empty() {
+            let dropped_message_ids: HashSet<String> = events
+                .iter()
+                .filter(|event| self.killed_run_ids.contains_key(&event.run_id))
+                .filter_map(|event| event.ref_id.clone())
+                .collect();
+            let event_count_before = events.len();
+            events.retain(|event| !self.killed_run_ids.contains_key(&event.run_id));
+            messages.retain(|message| !dropped_message_ids.contains(&message.message_id));
+            let dropped_event_count = event_count_before.saturating_sub(events.len());
+            if dropped_event_count > 0 {
+                log::info!(
+                    "Dropped {dropped_event_count} orchestration events for killed run IDs while handling {conversation_id:?}"
+                );
+            }
+        }
         // Track message IDs for server-side mark_delivered calls.
         let message_ids: Vec<String> = messages
             .iter()
