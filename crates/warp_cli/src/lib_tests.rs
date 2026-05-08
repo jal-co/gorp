@@ -1512,6 +1512,38 @@ fn agent_run_cloud_rejects_both_computer_use_flags() {
 }
 
 #[test]
+fn agent_run_cloud_rejects_computer_use_with_harness() {
+    let result = Args::try_parse_from([
+        "warp",
+        "agent",
+        "run-cloud",
+        "--prompt",
+        "hello",
+        "--computer-use",
+        "--harness",
+        "claude",
+    ]);
+
+    assert!(result.is_err());
+}
+
+#[test]
+fn agent_run_cloud_rejects_no_computer_use_with_harness() {
+    let result = Args::try_parse_from([
+        "warp",
+        "agent",
+        "run-cloud",
+        "--prompt",
+        "hello",
+        "--no-computer-use",
+        "--harness",
+        "claude",
+    ]);
+
+    assert!(result.is_err());
+}
+
+#[test]
 fn agent_run_cloud_defaults_to_no_computer_use_override() {
     let args = Args::try_parse_from(["warp", "agent", "run-cloud", "--prompt", "hello"]).unwrap();
 

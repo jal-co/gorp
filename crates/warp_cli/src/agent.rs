@@ -75,11 +75,11 @@ impl PromptArg {
 #[derive(Debug, Clone, Args, Default)]
 pub struct ComputerUseArgs {
     /// Enable computer use capabilities for this agent run.
-    #[arg(long = "computer-use", conflicts_with = "no_computer_use")]
+    #[arg(long = "computer-use", conflicts_with_all = ["no_computer_use", "harness"])]
     pub computer_use: bool,
 
     /// Disable computer use capabilities for this agent run.
-    #[arg(long = "no-computer-use", conflicts_with = "computer_use")]
+    #[arg(long = "no-computer-use", conflicts_with_all = ["computer_use", "harness"])]
     pub no_computer_use: bool,
 }
 
