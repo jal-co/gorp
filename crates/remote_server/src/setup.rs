@@ -4,6 +4,7 @@ pub use glibc::{GlibcVersion, RemoteLibc};
 
 use std::time::Duration;
 
+use anyhow::anyhow;
 use warp_core::channel::{Channel, ChannelState};
 
 /// State machine for the remote server install → launch → initialize flow.
@@ -244,63 +245,52 @@ impl RemoteArch {
     }
 }
 
-/// Typed error from [`parse_uname_output`], distinguishing
-/// genuinely-unsupported platforms from malformed output.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum PlatformParseError {
-    /// `uname` output was empty or unparseable.
-    Malformed(String),
-    /// The OS kernel name is not one we ship a binary for.
-    UnsupportedOs(String),
-    /// The CPU architecture is not one we ship a binary for.
-    UnsupportedArch(String),
-}
-
-impl std::fmt::Display for PlatformParseError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Malformed(msg) => write!(f, "{msg}"),
-            Self::UnsupportedOs(os) => write!(f, "unsupported OS: {os}"),
-            Self::UnsupportedArch(arch) => write!(f, "unsupported arch: {arch}"),
-        }
-    }
-}
-
-impl std::error::Error for PlatformParseError {}
-
 /// Parse `uname -sm` output into a `RemotePlatform`.
 ///
 /// The expected format is `<os> <arch>`, e.g. `Linux x86_64` or `Darwin arm64`.
 /// Takes the last line to skip any shell initialization output.
 ///
-/// Returns a typed [`PlatformParseError`] so the caller can distinguish
-/// genuinely-unsupported architectures/OSes from parse failures and
-/// route them to `Unsupported` rather than generic `Failed`.
-pub fn parse_uname_output(output: &str) -> std::result::Result<RemotePlatform, PlatformParseError> {
+/// Returns a typed [`crate::transport::Error`] so the caller can
+/// distinguish genuinely-unsupported architectures/OSes
+/// (`UnsupportedOs` / `UnsupportedArch`) from parse failures (`Other`)
+/// and route them appropriately.
+pub fn parse_uname_output(
+    output: &str,
+) -> std::result::Result<RemotePlatform, crate::transport::Error> {
+    use crate::transport::Error;
+
     let line = output
         .lines()
         .last()
-        .ok_or_else(|| PlatformParseError::Malformed("empty uname output".to_string()))?
-        .trim();
+        .ok_or_else(|| Error::Other(anyhow!("empty uname output")))
+        .map(str::trim)?;
 
     let mut parts = line.split_whitespace();
-    let os_str = parts.next().ok_or_else(|| {
-        PlatformParseError::Malformed(format!("missing OS in uname output: {line}"))
-    })?;
-    let arch_str = parts.next().ok_or_else(|| {
-        PlatformParseError::Malformed(format!("missing arch in uname output: {line}"))
-    })?;
+    let os_str = parts
+        .next()
+        .ok_or_else(|| Error::Other(anyhow!("missing OS in uname output: {line}")))?;
+    let arch_str = parts
+        .next()
+        .ok_or_else(|| Error::Other(anyhow!("missing arch in uname output: {line}")))?;
 
     let os = match os_str {
         "Linux" => RemoteOs::Linux,
         "Darwin" => RemoteOs::MacOs,
-        other => return Err(PlatformParseError::UnsupportedOs(other.to_string())),
+        other => {
+            return Err(Error::UnsupportedOs {
+                os: other.to_string(),
+            })
+        }
     };
 
     let arch = match arch_str {
         "x86_64" => RemoteArch::X86_64,
         "aarch64" | "arm64" | "armv8l" => RemoteArch::Aarch64,
-        other => return Err(PlatformParseError::UnsupportedArch(other.to_string())),
+        other => {
+            return Err(Error::UnsupportedArch {
+                arch: other.to_string(),
+            })
+        }
     };
 
     Ok(RemotePlatform { os, arch })

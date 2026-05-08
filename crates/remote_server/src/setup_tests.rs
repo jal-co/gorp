@@ -53,46 +53,56 @@ fn parse_uname_trims_whitespace() {
 #[test]
 fn parse_uname_unsupported_os() {
     let result = parse_uname_output("Windows x86_64");
-    assert_eq!(
-        result.unwrap_err(),
-        PlatformParseError::UnsupportedOs("Windows".to_string())
-    );
+    match result {
+        Err(crate::transport::Error::UnsupportedOs { os }) => {
+            assert_eq!(os, "Windows");
+        }
+        other => panic!("expected UnsupportedOs, got {other:?}"),
+    }
 }
 
 #[test]
 fn parse_uname_unsupported_arch() {
     let result = parse_uname_output("Linux mips");
-    assert_eq!(
-        result.unwrap_err(),
-        PlatformParseError::UnsupportedArch("mips".to_string())
-    );
+    match result {
+        Err(crate::transport::Error::UnsupportedArch { arch }) => {
+            assert_eq!(arch, "mips");
+        }
+        other => panic!("expected UnsupportedArch, got {other:?}"),
+    }
 }
 
 #[test]
 fn parse_uname_unsupported_arch_armv7l() {
     let result = parse_uname_output("Linux armv7l");
-    assert_eq!(
-        result.unwrap_err(),
-        PlatformParseError::UnsupportedArch("armv7l".to_string())
-    );
+    match result {
+        Err(crate::transport::Error::UnsupportedArch { arch }) => {
+            assert_eq!(arch, "armv7l");
+        }
+        other => panic!("expected UnsupportedArch, got {other:?}"),
+    }
 }
 
 #[test]
 fn parse_uname_unsupported_arch_i686() {
     let result = parse_uname_output("Linux i686");
-    assert_eq!(
-        result.unwrap_err(),
-        PlatformParseError::UnsupportedArch("i686".to_string())
-    );
+    match result {
+        Err(crate::transport::Error::UnsupportedArch { arch }) => {
+            assert_eq!(arch, "i686");
+        }
+        other => panic!("expected UnsupportedArch, got {other:?}"),
+    }
 }
 
 #[test]
 fn parse_uname_unsupported_os_freebsd() {
     let result = parse_uname_output("FreeBSD amd64");
-    assert_eq!(
-        result.unwrap_err(),
-        PlatformParseError::UnsupportedOs("FreeBSD".to_string())
-    );
+    match result {
+        Err(crate::transport::Error::UnsupportedOs { os }) => {
+            assert_eq!(os, "FreeBSD");
+        }
+        other => panic!("expected UnsupportedOs, got {other:?}"),
+    }
 }
 
 #[test]
@@ -100,7 +110,7 @@ fn parse_uname_empty_output() {
     let result = parse_uname_output("");
     assert!(matches!(
         result.unwrap_err(),
-        PlatformParseError::Malformed(_)
+        crate::transport::Error::Other(_)
     ));
 }
 
@@ -109,24 +119,8 @@ fn parse_uname_missing_arch() {
     let result = parse_uname_output("Linux");
     assert!(matches!(
         result.unwrap_err(),
-        PlatformParseError::Malformed(_)
+        crate::transport::Error::Other(_)
     ));
-}
-
-#[test]
-fn platform_parse_error_display() {
-    assert_eq!(
-        PlatformParseError::UnsupportedOs("Windows".to_string()).to_string(),
-        "unsupported OS: Windows"
-    );
-    assert_eq!(
-        PlatformParseError::UnsupportedArch("mips".to_string()).to_string(),
-        "unsupported arch: mips"
-    );
-    assert_eq!(
-        PlatformParseError::Malformed("bad output".to_string()).to_string(),
-        "bad output"
-    );
 }
 
 #[test]
