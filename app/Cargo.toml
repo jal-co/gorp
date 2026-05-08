@@ -294,7 +294,6 @@ aws-types = "1"
 rmcp = { workspace = true, features = [
     "auth",
     "transport-streamable-http-client-reqwest",
-    "transport-sse-client-reqwest",
     "transport-child-process",
 ] }
 notify-debouncer-full.workspace = true
