@@ -9,6 +9,7 @@
 #   {version_query}             — e.g. &version=v0.2026... (empty when no release tag)
 #   {version_suffix}            — e.g. -v0.2026...        (empty when no release tag)
 #   {no_http_client_exit_code}  — exit code when neither curl nor wget is available
+#   {download_failed_exit_code} — exit code when curl/wget download fails (triggers SCP fallback)
 #   {staging_tarball_path}      — path to a pre-uploaded tarball (SCP fallback; empty normally)
 set -e
 
@@ -67,13 +68,24 @@ else
   # Normal path: download via curl or wget.
   url="{download_base_url}?package=tar&os=$os_name&arch=$arch_name&channel={channel}{version_query}"
 
+  # Capture the download tool's exit code instead of letting `set -e`
+  # abort the script immediately. Any non-zero exit from curl/wget is
+  # treated as a recoverable download failure (DNS, TLS, HTTP error,
+  # timeout, partial transfer, Snap-confined curl, etc.) and surfaced
+  # via a dedicated sentinel so the client can fall back to SCP upload.
+  dl_exit=0
   if command -v curl >/dev/null 2>&1; then
-    curl -fSL "$url" -o "$tmpdir/oz.tar.gz"
+    curl -fSL --connect-timeout 15 "$url" -o "$tmpdir/oz.tar.gz" || dl_exit=$?
   elif command -v wget >/dev/null 2>&1; then
-    wget -q -O "$tmpdir/oz.tar.gz" "$url"
+    wget -q --connect-timeout=15 -O "$tmpdir/oz.tar.gz" "$url" || dl_exit=$?
   else
     echo "error: neither curl nor wget is available" >&2
     exit {no_http_client_exit_code}
+  fi
+
+  if [ "$dl_exit" -ne 0 ]; then
+    echo "WARP_DOWNLOAD_FAILED: tool_exit=$dl_exit" >&2
+    exit {download_failed_exit_code}
   fi
 fi
 

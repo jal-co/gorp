@@ -415,6 +415,10 @@ pub fn install_script(staging_tarball_path: Option<&str>) -> String {
             "{no_http_client_exit_code}",
             &NO_HTTP_CLIENT_EXIT_CODE.to_string(),
         )
+        .replace(
+            "{download_failed_exit_code}",
+            &DOWNLOAD_FAILED_EXIT_CODE.to_string(),
+        )
         .replace("{staging_tarball_path}", staging_tarball_path.unwrap_or(""))
 }
 
@@ -474,6 +478,15 @@ pub fn download_tarball_url(platform: &RemotePlatform) -> String {
 /// available on the remote host. The Rust side matches on this to
 /// trigger the SCP upload fallback.
 pub const NO_HTTP_CLIENT_EXIT_CODE: i32 = 3;
+
+/// Exit code the install script uses when curl/wget is present but the
+/// download itself fails — DNS resolution, TLS/certificate errors,
+/// HTTP 403/502, connection reset, timeout, partial transfer, write
+/// failure (e.g. Snap-confined curl), etc. The Rust side matches on
+/// this to trigger the same SCP upload fallback as
+/// [`NO_HTTP_CLIENT_EXIT_CODE`], preserving the original tool stderr
+/// for diagnostics.
+pub const DOWNLOAD_FAILED_EXIT_CODE: i32 = 4;
 
 /// Timeout for the binary existence check.
 pub const CHECK_TIMEOUT: Duration = Duration::from_secs(10);

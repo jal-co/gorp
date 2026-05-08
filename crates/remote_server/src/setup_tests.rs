@@ -307,3 +307,172 @@ fn parse_preinstall_missing_status_falls_open() {
     assert_eq!(result.status, PreinstallStatus::Unknown);
     assert!(result.is_supported());
 }
+
+// ---------- download-failure sentinel tests ----------
+
+/// The sentinel exit codes must not collide with each other or with
+/// values that have reserved meaning in bash (0 = success, 1 = generic
+/// failure, 2 = misuse / our "unsupported arch/OS" exit). This is a
+/// compile-time-visible static check.
+#[test]
+fn sentinel_exit_codes_are_distinct() {
+    assert_ne!(NO_HTTP_CLIENT_EXIT_CODE, DOWNLOAD_FAILED_EXIT_CODE);
+    // Neither sentinel should shadow the script's own non-sentinel exits.
+    for sentinel in [NO_HTTP_CLIENT_EXIT_CODE, DOWNLOAD_FAILED_EXIT_CODE] {
+        assert_ne!(sentinel, 0, "sentinel must not be 0 (success)");
+        assert_ne!(sentinel, 1, "sentinel must not be 1 (generic failure)");
+        assert_ne!(sentinel, 2, "sentinel must not be 2 (unsupported arch/OS)");
+    }
+}
+
+/// Static check: the install script template must contain the
+/// `WARP_DOWNLOAD_FAILED` sentinel marker so the Rust side can
+/// identify download failures in stderr diagnostics.
+#[test]
+fn install_script_contains_download_failed_sentinel_marker() {
+    assert!(
+        INSTALL_SCRIPT_TEMPLATE.contains("WARP_DOWNLOAD_FAILED"),
+        "install_remote_server.sh must emit the WARP_DOWNLOAD_FAILED \
+         marker to stderr when curl/wget fails so the client can \
+         identify download-specific failures in logs",
+    );
+}
+
+/// Static check: the download path must capture the tool's exit code
+/// via `|| dl_exit=$?` rather than letting `set -e` abort with the
+/// raw curl/wget exit code. Without this, the Rust side sees curl's
+/// native exit code (e.g. 6 for DNS, 60 for TLS) instead of our
+/// sentinel, and the SCP fallback never triggers.
+#[test]
+fn install_script_captures_download_exit_code() {
+    assert!(
+        INSTALL_SCRIPT_TEMPLATE.contains("|| dl_exit=$?"),
+        "install_remote_server.sh must capture the download tool's exit \
+         code via `|| dl_exit=$?` instead of letting `set -e` propagate \
+         the raw exit code. Without this, download failures won't map \
+         to the DOWNLOAD_FAILED sentinel and SCP fallback won't trigger.",
+    );
+}
+
+/// Static check: curl must use `--connect-timeout` to bound the DNS +
+/// TCP handshake phase. Without this, hosts with broken DNS can stall
+/// the install indefinitely until the outer SSH timeout kills it,
+/// which surfaces as a generic timeout rather than a download failure.
+#[test]
+fn install_script_curl_has_connect_timeout() {
+    assert!(
+        INSTALL_SCRIPT_TEMPLATE.contains("--connect-timeout"),
+        "install_remote_server.sh must pass --connect-timeout to curl \
+         so DNS/TCP-level failures surface quickly as recoverable \
+         download errors rather than stalling until the SSH timeout.",
+    );
+}
+
+/// The rendered install script must substitute both sentinel
+/// placeholders with their numeric values.
+#[test]
+fn install_script_substitutes_download_failed_exit_code() {
+    let script = install_script(None);
+    // The rendered script must not contain the raw placeholder.
+    assert!(
+        !script.contains("{download_failed_exit_code}"),
+        "install_script() must substitute {{download_failed_exit_code}} placeholder",
+    );
+    // It should contain the numeric literal for the sentinel.
+    assert!(
+        script.contains(&format!("exit {DOWNLOAD_FAILED_EXIT_CODE}")),
+        "rendered install script must contain `exit {DOWNLOAD_FAILED_EXIT_CODE}`",
+    );
+}
+
+/// Regression: the `dl_exit` check in the install script must compare
+/// against 0 (not empty string) to correctly detect download failures.
+/// A common shell bug is `[ "$var" -ne 0 ]` failing when `$var` is
+/// unset — our script initializes `dl_exit=0` to avoid this.
+#[test]
+fn install_script_initializes_dl_exit() {
+    assert!(
+        INSTALL_SCRIPT_TEMPLATE.contains("dl_exit=0"),
+        "install_remote_server.sh must initialize dl_exit=0 before the \
+         download attempt so the subsequent `[ \"$dl_exit\" -ne 0 ]` \
+         check doesn't fail on an unset variable.",
+    );
+}
+
+/// Shell-level test: runs the download path of the production install
+/// script against a guaranteed-unreachable URL and verifies that the
+/// script exits with DOWNLOAD_FAILED_EXIT_CODE (not curl's native
+/// exit code). This exercises the full sentinel flow end-to-end.
+///
+/// Gated to Unix (the script targets remote Unix hosts) and requires
+/// `curl` on the test runner.
+#[cfg(unix)]
+#[test]
+fn install_script_download_failure_exits_with_sentinel() {
+    use command::blocking::Command;
+    use std::process::Stdio;
+
+    // Skip if curl isn't available on the test runner.
+    let has_curl = Command::new("command")
+        .args(["-v", "curl"])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false);
+    if !has_curl {
+        eprintln!("skipping: curl not available on test runner");
+        return;
+    }
+
+    let bash = if std::path::Path::new("/bin/bash").exists() {
+        "/bin/bash"
+    } else {
+        "bash"
+    };
+
+    // Build a script that will definitely fail the download:
+    // point at a non-routable IP so curl fails fast with a connect error.
+    let script = install_script(None);
+
+    // Replace the download URL with a guaranteed-failing one. The
+    // rendered script has the real URL; swap it for 192.0.2.1 (TEST-NET,
+    // RFC 5737 — guaranteed non-routable).
+    let bad_script = script
+        .replace(
+            &download_url(),
+            "http://192.0.2.1:1/download/cli",
+        );
+
+    // We need to truncate after the download sentinel check but before
+    // tar (which would fail on the missing file). Insert an early exit
+    // right before `tar`.
+    let bad_script = bad_script.replace(
+        "tar -xzf",
+        "echo 'should not reach here' >&2; exit 99\ntar -xzf",
+    );
+
+    let output = Command::new(bash)
+        .arg("-c")
+        .arg(&bad_script)
+        .env("HOME", "/tmp")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+        .expect("failed to spawn bash");
+
+    let exit_code = output.status.code().unwrap_or(-1);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    assert_eq!(
+        exit_code, DOWNLOAD_FAILED_EXIT_CODE,
+        "install script should exit with DOWNLOAD_FAILED_EXIT_CODE ({DOWNLOAD_FAILED_EXIT_CODE}) \
+         on curl failure, but exited with {exit_code}.\nstderr: {stderr}",
+    );
+
+    // The sentinel marker must appear in stderr for diagnostics.
+    assert!(
+        stderr.contains("WARP_DOWNLOAD_FAILED"),
+        "stderr must contain WARP_DOWNLOAD_FAILED marker for diagnostics.\nstderr: {stderr}",
+    );
+}

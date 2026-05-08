@@ -220,6 +220,16 @@ impl RemoteTransport for SshTransport {
                         .await
                         .map_err(|e| format!("{e:#}"))
                 }
+                Ok(output)
+                    if output.status.code()
+                        == Some(remote_server::setup::DOWNLOAD_FAILED_EXIT_CODE) =>
+                {
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    log::info!("Remote download failed ({stderr}), falling back to SCP upload");
+                    scp_install_fallback(&socket_path)
+                        .await
+                        .map_err(|e| format!("{e:#}"))
+                }
                 Ok(output) => {
                     let code = output.status.code().unwrap_or(-1);
                     let stderr = String::from_utf8_lossy(&output.stderr);
