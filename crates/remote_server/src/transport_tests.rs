@@ -53,6 +53,23 @@ fn script_failed_disk_full_produces_targeted_message() {
 }
 
 #[test]
+fn script_failed_curl_write_failure_produces_disk_full_message() {
+    // curl reports "Failure writing output to destination" when the
+    // download destination runs out of space (discovered via Docker test
+    // with a tiny tmpfs mount).
+    let err = Error::ScriptFailed {
+        exit_code: 23,
+        stderr: "curl: (23) Failure writing output to destination".into(),
+    };
+    let ufe = err.user_facing_error(SetupStage::InstallBinary);
+    let detail = ufe.detail.unwrap();
+    assert!(
+        detail.contains("free up space"),
+        "curl write-failure should produce disk-full message, got: {detail}"
+    );
+}
+
+#[test]
 fn script_failed_ssh_disconnect_produces_targeted_message() {
     let err = Error::ScriptFailed {
         exit_code: 255,

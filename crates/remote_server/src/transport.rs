@@ -103,7 +103,9 @@ impl Error {
                         "Cannot create install directory — check write permissions \
                          on your home directory (exit code {exit_code})"
                     )
-                } else if stderr.contains("No space left on device") {
+                } else if stderr.contains("No space left on device")
+                    || stderr.contains("Failure writing output to destination")
+                {
                     format!(
                         "Not enough disk space on the remote host — free up space \
                          and try again (exit code {exit_code})"
