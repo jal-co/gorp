@@ -520,14 +520,17 @@ impl TerminalView {
         // This is a bit of a hack- but it ensures we never show more than one footer in the
         // blocklist.
         self.hide_use_agent_footer_in_blocklist(ctx);
-        let (should_render_footer, is_alt_screen_active) = {
+        let (should_render_footer, is_alt_screen_active, has_cli_agent) = {
             let model = self.model.lock();
             (
                 self.should_render_use_agent_footer(&model, ctx),
                 model.is_alt_screen_active(),
+                CLIAgentSessionsModel::as_ref(ctx)
+                    .session(self.view_id)
+                    .is_some(),
             )
         };
-        if is_alt_screen_active || !should_render_footer {
+        if !should_render_footer || (is_alt_screen_active && !has_cli_agent) {
             return;
         }
 
