@@ -354,9 +354,9 @@ impl<T: Action + Clone> SearchBarState<T> {
     }
 
     /// Returns true when the zero-state UI should be shown: the buffer is empty and no
-    /// user-chosen filter is active. This is a pure computation — no cached flag.
+    /// user-chosen filter is active.
     pub fn should_show_zero_state(&self) -> bool {
-        self.buffer_is_empty && matches!(self.query_filter, FilterState::Unfiltered)
+        self.buffer_is_empty && self.query_filter == FilterState::Unfiltered
     }
 
     fn should_run_query(&self) -> bool {
