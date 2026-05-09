@@ -92,16 +92,6 @@ pub enum FilterState {
     },
 }
 
-impl FilterState {
-    fn zero_state(&self) -> bool {
-        match self {
-            FilterState::Unfiltered => true,
-            FilterState::Visible(_) => false,
-            FilterState::Fixed { .. } => true,
-        }
-    }
-}
-
 /// View state for the search bar.
 pub struct SearchBarState<T: Action + Clone> {
     selected_index: Option<usize>,
