@@ -288,6 +288,10 @@ fn test_detect_with_arguments() {
                 CLIAgent::detect("hermes chat", None, None, ctx),
                 Some(CLIAgent::Hermes),
             );
+            assert_eq!(
+                CLIAgent::detect("hermes --tui", None, None, ctx),
+                Some(CLIAgent::Hermes),
+            );
         });
     });
 }
