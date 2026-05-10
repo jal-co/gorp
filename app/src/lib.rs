@@ -126,6 +126,7 @@ pub mod settings;
 pub mod settings_view;
 pub mod tab_configs;
 pub mod terminal;
+mod terminal_only;
 pub mod themes;
 use crate::ai::active_agent_views_model::ActiveAgentViewsModel;
 #[cfg(not(target_family = "wasm"))]
