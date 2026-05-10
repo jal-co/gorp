@@ -1,3 +1,18 @@
+# Workflows (disabled)
+
+All upstream Warp workflows in this directory are renamed `*.yml.disabled` so
+GitHub will not run them on the gorp fork. They depend on Warp-internal
+infrastructure (release pipelines, repo-sync, internal labels, organization
+secrets) and would either fail or do nothing useful here.
+
+If you want to bring one back, rename `<name>.yml.disabled` → `<name>.yml` and
+strip the Warp-internal bits.
+
+Gorp's own CI lives alongside these as plain `*.yml` files (added in later
+branches).
+
+---
+
 # Release Configurations
 
 This README file documents the format of the `release_configurations.json` file located in this directory.  The file defines Warp's various release channels, and provides values for the various variables that are necessary to run the `create_new_releases.yml` GitHub workflow.
