@@ -110,9 +110,11 @@ if ("$CHANNEL" -eq 'local') {
     # TODO(vorporeal): Remove this once we get tests passing with this default enabled.
     $FEATURES = "$FEATURES,nld_improvements"
 } elseif ("$CHANNEL" -eq 'oss') {
-    $WARP_BIN = 'warp-oss'
-    $BINARY_NAME = 'warp-oss.exe'
-    $APP_NAME = 'WarpOss'
+    # `oss` is the gorp channel; the upstream channel name is preserved
+    # to keep diffs against upstream/master small.
+    $WARP_BIN = 'gorp'
+    $BINARY_NAME = 'gorp.exe'
+    $APP_NAME = 'Gorp'
     # The OSS channel does not ship Sentry, so drop the crash_reporting feature
     # (which would otherwise pull in the Sentry SDK as a dependency).
     $FEATURES = 'release_bundle,gui,nld_improvements'
