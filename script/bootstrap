@@ -8,6 +8,7 @@ set -eo pipefail
 
 OS_TYPE="$(uname -s)"
 INSTALL_COMMON_SKILLS=0
+COMMON_SKILLS_TARGET="${WARP_COMMON_SKILLS_INSTALL_TARGET:-}"
 PLATFORM_ARGS=()
 
 usage() {
@@ -23,6 +24,8 @@ Options:
 Environment:
   WARP_SKIP_COMMON_SKILLS_INSTALL=1
       Skip installing common agent skills, even when --install-common-skills is provided.
+  WARP_COMMON_SKILLS_INSTALL_TARGET=project|global
+      Choose the install target when no explicit prompt answer is provided.
 EOF
 }
 
@@ -46,11 +49,56 @@ print_bootstrap_preview() {
     echo "  - Skip common agent skills unless --install-common-skills is provided."
   elif [[ "${WARP_SKIP_COMMON_SKILLS_INSTALL:-}" = "1" ]]; then
     echo "  - Skip common agent skills because WARP_SKIP_COMMON_SKILLS_INSTALL=1."
+  elif [[ "${COMMON_SKILLS_TARGET:-project}" = "global" ]]; then
+    echo "  - Install or update common agent skills in ~/.agents/skills if needed."
   else
-    echo "  - Install or update common agent skills from skills-lock.json if needed."
+    echo "  - Install or update common agent skills in this checkout's .agents/skills if needed."
   fi
   echo "Run ./script/bootstrap --help to see options and environment overrides."
   echo
+}
+
+normalize_common_skills_target() {
+  local target
+  target="$(printf "%s" "$1" | tr '[:upper:]' '[:lower:]')"
+
+  case "${target}" in
+    ""|p|project|1)
+      echo "project"
+      ;;
+    g|global|2)
+      echo "global"
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+select_common_skills_target() {
+  local reply=""
+  local target=""
+
+  if [[ -n "${COMMON_SKILLS_TARGET}" ]]; then
+    normalize_common_skills_target "${COMMON_SKILLS_TARGET}"
+    return
+  fi
+
+  if [[ -t 0 && -t 1 ]]; then
+    echo "Where should common agent skills be installed?" >&2
+    echo "  1) Project checkout .agents/skills (default)" >&2
+    echo "  2) Global user skills ~/.agents/skills" >&2
+    printf "Install common skills to [project/global] (default: project): " >&2
+    read -r reply
+    if target="$(normalize_common_skills_target "${reply}")"; then
+      echo "${target}"
+    else
+      echo "Unrecognized install target '${reply}', defaulting to project." >&2
+      echo "project"
+    fi
+  else
+    echo "project"
+  fi
 }
 
 for arg in "$@"; do
@@ -74,9 +122,18 @@ for arg in "$@"; do
   esac
 done
 
+if [[ "${INSTALL_COMMON_SKILLS}" -eq 1 && "${WARP_SKIP_COMMON_SKILLS_INSTALL:-}" != "1" ]]; then
+  SELECTED_COMMON_SKILLS_TARGET=""
+  if ! SELECTED_COMMON_SKILLS_TARGET="$(select_common_skills_target)"; then
+    echo "Invalid common skills install target: ${COMMON_SKILLS_TARGET}" >&2
+    exit 1
+  fi
+  COMMON_SKILLS_TARGET="${SELECTED_COMMON_SKILLS_TARGET}"
+fi
+
 maybe_install_common_skills() {
   if [[ "${INSTALL_COMMON_SKILLS}" -eq 1 ]]; then
-    ./script/install_common_skills --if-needed
+    ./script/install_common_skills "--${COMMON_SKILLS_TARGET:-project}" --if-needed
   fi
 }
 
@@ -90,7 +147,7 @@ elif [[ "$OS_TYPE" = "Linux" ]]; then
   maybe_install_common_skills
 elif [[ "$OS_TYPE" =~ ^(MINGW64_NT|MSYS_NT) ]]; then
   if [[ "${INSTALL_COMMON_SKILLS}" -eq 1 ]]; then
-    ./script/windows/bootstrap.ps1 "${PLATFORM_ARGS[@]}" -InstallCommonSkills
+    ./script/windows/bootstrap.ps1 "${PLATFORM_ARGS[@]}" -InstallCommonSkills -CommonSkillsTarget "${COMMON_SKILLS_TARGET:-project}"
   else
     ./script/windows/bootstrap.ps1 "${PLATFORM_ARGS[@]}"
   fi

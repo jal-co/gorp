@@ -6,10 +6,13 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")"/.. && pwd)"
 LOCK_FILE="${REPO_ROOT}/skills-lock.json"
 STAMP_RELATIVE_PATH="warp/common-skills-lock.hash"
 SKILLS_CLI_VERSION="1.5.6"
+COMMON_SKILLS_SOURCE="warpdotdev/common-skills"
+GLOBAL_AGENT="warp"
 
 IF_NEEDED=0
 FORCE=0
 QUIET=0
+TARGET="${WARP_COMMON_SKILLS_INSTALL_TARGET:-project}"
 
 usage() {
   cat <<EOF
@@ -18,6 +21,8 @@ Usage: ./script/install_common_skills [options]
 Install or update common agent skills from the standard project skills-lock.json.
 
 Options:
+  --project            Install into this checkout's .agents/skills directory (default).
+  --global             Install into ~/.agents/skills for the current user.
   --if-needed          Skip installation when the local stamp matches skills-lock.json.
   --non-interactive    Accepted for compatibility; installation is non-interactive.
   --force              Install even if the local stamp is already up to date.
@@ -27,6 +32,8 @@ Options:
 Environment:
   WARP_SKIP_COMMON_SKILLS_INSTALL=1
       Skip installing common agent skills.
+  WARP_COMMON_SKILLS_INSTALL_TARGET=project|global
+      Choose the install target when no explicit --project/--global flag is provided.
 EOF
 }
 
@@ -40,7 +47,7 @@ lock_hash() {
   git -C "${REPO_ROOT}" hash-object "${LOCK_FILE}"
 }
 
-stamp_file() {
+project_stamp_file() {
   local git_path=""
 
   if git_path="$(git -C "${REPO_ROOT}" rev-parse --git-path "${STAMP_RELATIVE_PATH}" 2>/dev/null)"; then
@@ -58,6 +65,18 @@ stamp_file() {
   echo "${REPO_ROOT}/.agents/skills/.common-skills-lock.hash"
 }
 
+global_stamp_file() {
+  echo "${HOME}/.agents/warp/common-skills-lock.hash"
+}
+
+stamp_file() {
+  if [[ "${TARGET}" = "global" ]]; then
+    global_stamp_file
+  else
+    project_stamp_file
+  fi
+}
+
 stamp_hash() {
   local file="$1"
 
@@ -66,15 +85,97 @@ stamp_hash() {
   fi
 }
 
-install_from_lock() {
+locked_skill_names() {
+  node -e '
+const fs = require("fs");
+const lock = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+for (const name of Object.keys(lock.skills || {})) {
+  console.log(name);
+}
+' "${LOCK_FILE}"
+}
+
+locked_skill_paths() {
+  node -e '
+const fs = require("fs");
+const lock = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+for (const skill of Object.values(lock.skills || {})) {
+  console.log(skill.skillPath);
+}
+' "${LOCK_FILE}"
+}
+
+locked_skills_installed() {
+  local name=""
+  local path=""
+
+  if [[ "${TARGET}" = "global" ]]; then
+    while IFS= read -r name; do
+      if [[ ! -f "${HOME}/.agents/skills/${name}/SKILL.md" ]]; then
+        return 1
+      fi
+    done < <(locked_skill_names)
+  else
+    while IFS= read -r path; do
+      if [[ ! -f "${REPO_ROOT}/${path}" ]]; then
+        return 1
+      fi
+    done < <(locked_skill_paths)
+  fi
+}
+
+install_project_from_lock() {
   (
     cd "${REPO_ROOT}"
     npx --yes "skills@${SKILLS_CLI_VERSION}" experimental_install
   )
 }
 
+install_global_from_lock() {
+  local skill_names=()
+  local name=""
+
+  while IFS= read -r name; do
+    skill_names+=("${name}")
+  done < <(locked_skill_names)
+
+  if [[ "${#skill_names[@]}" -eq 0 ]]; then
+    echo "error: no skills found in ${LOCK_FILE}" >&2
+    exit 1
+  fi
+
+  (
+    cd "${REPO_ROOT}"
+    npx --yes "skills@${SKILLS_CLI_VERSION}" add "${COMMON_SKILLS_SOURCE}" -g -a "${GLOBAL_AGENT}" -s "${skill_names[@]}" -y --copy
+  )
+}
+
+install_from_lock() {
+  if [[ "${TARGET}" = "global" ]]; then
+    install_global_from_lock
+  else
+    install_project_from_lock
+  fi
+}
+
+target_description() {
+  if [[ "${TARGET}" = "global" ]]; then
+    echo "~/.agents/skills"
+  else
+    echo ".agents/skills"
+  fi
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --project)
+      TARGET="project"
+      shift
+      ;;
+    --global)
+      TARGET="global"
+      shift
+      ;;
     --if-needed)
       IF_NEEDED=1
       shift
@@ -101,10 +202,15 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
-
 if [[ "${WARP_SKIP_COMMON_SKILLS_INSTALL:-}" = "1" ]]; then
   log "Skipping common-skills install because WARP_SKIP_COMMON_SKILLS_INSTALL=1."
   exit 0
+fi
+
+if [[ "${TARGET}" != "project" && "${TARGET}" != "global" ]]; then
+  echo "error: invalid common skills install target: ${TARGET} (expected project or global)" >&2
+  usage >&2
+  exit 1
 fi
 
 if [[ ! -f "${LOCK_FILE}" ]]; then
@@ -116,12 +222,13 @@ LOCK_HASH="$(lock_hash)"
 STAMP_FILE="$(stamp_file)"
 STAMP_HASH="$(stamp_hash "${STAMP_FILE}")"
 
-if [[ "${FORCE}" -ne 1 && "${IF_NEEDED}" -eq 1 && "${STAMP_HASH}" = "${LOCK_HASH}" ]]; then
+if [[ "${FORCE}" -ne 1 && "${IF_NEEDED}" -eq 1 && "${STAMP_HASH}" = "${LOCK_HASH}" ]] && locked_skills_installed; then
   log "Common skills are already up to date."
   exit 0
 fi
 
-echo "Installing common agent skills from skills-lock.json."
+echo "Installing common agent skills from skills-lock.json into $(target_description)."
 install_from_lock
+LOCK_HASH="$(lock_hash)"
 mkdir -p "$(dirname "${STAMP_FILE}")"
 printf "%s\n" "${LOCK_HASH}" > "${STAMP_FILE}"

@@ -38,12 +38,13 @@ Environment variables:
 
 ### Platform Setup
 - `./script/bootstrap` - Platform-specific setup (calls platform-specific bootstrap scripts)
-- `./script/bootstrap --install-common-skills` - Platform setup plus common agent skill installation from `skills-lock.json`.
-- `./script/install_common_skills --if-needed` - Install or refresh shared agent skills from the standard `npx skills` project lock.
+- `./script/bootstrap --install-common-skills` - Platform setup plus common agent skill installation from `skills-lock.json`; prompts for project (`.agents/skills`) or global (`~/.agents/skills`) install target.
+- `./script/install_common_skills --project --if-needed` - Install or refresh shared agent skills in this checkout's `.agents/skills` from the standard `npx skills` project lock. `--project` is the default.
+- `./script/install_common_skills --global --if-needed` - Install or refresh shared agent skills in `~/.agents/skills`.
 - `./script/install_cargo_build_deps` - Install Cargo build dependencies
 - `./script/install_cargo_test_deps` - Install Cargo test dependencies
 
-`skills-lock.json` is the standard project lock file managed by `npx skills`. `script/run` checks this lock before building and restores the checked-in project skills with the pinned `skills@1.5.6` CLI when the local install stamp is stale. To update the locked common skills, run `npx --yes skills@1.5.6 update -p -y` and commit the resulting `skills-lock.json` and `.agents/skills` changes.
+`skills-lock.json` is the standard project lock file managed by `npx skills`. `script/run` checks this lock before building and prompts for whether to install the shared skills in the project checkout or globally. Cloud setup should use `./script/install_common_skills --project --if-needed --non-interactive` or set `WARP_COMMON_SKILLS_INSTALL_TARGET=project` to avoid the prompt. To update the locked common skills, run `npx --yes skills@1.5.6 update -p -y` and commit the resulting `skills-lock.json` changes.
 
 ## Architecture Overview
 
