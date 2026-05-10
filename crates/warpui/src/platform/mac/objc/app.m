@@ -1,6 +1,6 @@
 #import <AppKit/AppKit.h>
 #import <Carbon/Carbon.h>
-#import <ServiceManagement/ServiceManagement.h>
+// gorp: ServiceManagement import removed; launch-at-login is gone.
 #import <UserNotifications/UserNotifications.h>
 
 #import "alert.h"
