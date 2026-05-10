@@ -55,7 +55,9 @@ impl Channel {
             Channel::Preview => "oz-preview",
             Channel::Local => "oz-local",
             Channel::Integration => "oz-integration",
-            Channel::Oss => "warp-oss",
+            // Channel::Oss is reused as the gorp channel; the upstream
+            // enum variant is kept to minimize churn against upstream merges.
+            Channel::Oss => "gorp",
         }
     }
 }
@@ -68,7 +70,7 @@ impl fmt::Display for Channel {
             Channel::Dev => "dev",
             Channel::Integration => "integration",
             Channel::Local => "local",
-            Channel::Oss => "warp-oss",
+            Channel::Oss => "gorp",
         })
     }
 }

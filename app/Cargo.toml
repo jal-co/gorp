@@ -1,7 +1,7 @@
 [package]
-authors = ["Warp Team <dev@warp.dev>"]
-default-run = "warp-oss"
-description = "The cloud-backed terminal for individuals and teams"
+authors = ["gorp contributors", "Warp Team <dev@warp.dev>"]
+default-run = "gorp"
+description = "A terminal forked from Warp, with AI/auth/telemetry/onboarding stripped out."
 edition = "2021"
 autobins = false
 name = "warp"
@@ -13,39 +13,14 @@ license.workspace = true
 name = "warp"
 path = "src/lib.rs"
 
-# We define separate targets for each channel (stable, preview, dev) so that we can
-# bundle with its own icon, app name, and channel-specific configuration (such as
-# flag overrides). Otherwise these binaries are exactly identical to our main binary.
+# Single shipping bin: `gorp`. The other upstream channel bins (local, stable,
+# preview, dev, integration) are removed in this fork — they all targeted Warp's
+# internal infra and don't function here. `generate_settings_schema` is kept as
+# a dev-time tool only.
 
 [[bin]]
-name = "warp-oss"
-path = "src/bin/oss.rs"
-test = false
-
-[[bin]]
-name = "warp"
-path = "src/bin/local.rs"
-test = false
-
-[[bin]]
-name = "integration"
-path = "src/bin/integration.rs"
-test = false
-
-[[bin]]
-name = "stable"
-path = "src/bin/stable.rs"
-test = false
-
-[[bin]]
-name = "dev"
-path = "src/bin/dev.rs"
-test = false
-
-[[bin]]
-name = "preview"
-path = "src/bin/preview.rs"
-required-features = ["preview_channel"]
+name = "gorp"
+path = "src/bin/gorp.rs"
 test = false
 
 [[bin]]
@@ -942,55 +917,14 @@ configurable_context_window = []
 handoff_cloud_cloud = ["cloud_mode_setup_v2"]
 git_credential_refresh = []
 
-[package.metadata.bundle.bin.warp-oss]
+[package.metadata.bundle.bin.gorp]
 category = "public.app-category.developer-tools"
-copyright = "© 2025, Denver Technologies, Inc"
-identifier = "dev.warp.WarpOss"
-name = "WarpOss"
+copyright = "Forked from Warp © Denver Technologies, Inc — modifications under AGPL-3.0/MIT"
+identifier = "dev.gorp.Gorp"
+name = "Gorp"
 resources = ["assets/onboarding"]
 icon = ["channels/oss/icon/no-padding/512x512.png", "channels/oss/icon/no-padding/icon.ico"]
-short_description = "The open-source, cloud-backed terminal for individuals and teams."
-
-[package.metadata.bundle.bin.stable]
-category = "public.app-category.developer-tools"
-copyright = "© 2025, Denver Technologies, Inc"
-identifier = "dev.warp.Warp-Stable"
-name = "Warp"
-osx_frameworks = [
-    "frameworks/default/Sentry-Dynamic-WithARM64e.xcframework/macos-arm64_arm64e_x86_64/Sentry.framework",
-]
-resources = ["assets/onboarding"]
-short_description = "The cloud-backed terminal for individuals and teams, stable build."
-
-[package.metadata.bundle.bin.preview]
-category = "public.app-category.developer-tools"
-copyright = "© 2025, Denver Technologies, Inc"
-identifier = "dev.warp.Warp-Preview"
-name = "WarpPreview"
-osx_frameworks = [
-    "frameworks/default/Sentry-Dynamic-WithARM64e.xcframework/macos-arm64_arm64e_x86_64/Sentry.framework",
-]
-resources = ["assets/onboarding"]
-short_description = "The cloud-backed terminal for individuals and teams, feature preview build."
-
-[package.metadata.bundle.bin.dev]
-category = "public.app-category.developer-tools"
-copyright = "© 2025, Denver Technologies, Inc"
-identifier = "dev.warp.Warp-Dev"
-name = "WarpDev"
-osx_frameworks = [
-    "frameworks/dev/Sentry-Dynamic-WithARM64e.xcframework/macos-arm64_arm64e_x86_64/Sentry.framework",
-]
-resources = ["assets/onboarding"]
-short_description = "The cloud-backed terminal for individuals and teams, developer build."
-
-[package.metadata.bundle.bin.warp]
-category = "public.app-category.developer-tools"
-copyright = "© 2025, Denver Technologies, Inc"
-identifier = "dev.warp.Warp-Local"
-name = "WarpLocal"
-resources = ["assets/onboarding"]
-short_description = "The cloud-backed terminal for individuals and teams, developer build."
+short_description = "A terminal forked from Warp, with AI/auth/telemetry/onboarding stripped out."
 
 [package.metadata.cargo-udeps.ignore]
 normal = ["embed_plist"]
