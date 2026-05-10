@@ -112,7 +112,8 @@ fn compile_objc_lib() {
     println!("cargo:rustc-link-lib=framework=SystemConfiguration");
     println!("cargo:rustc-link-lib=framework=UniformTypeIdentifiers");
     println!("cargo:rustc-link-lib=framework=AVFoundation");
-    println!("cargo:rustc-link-lib=framework=ServiceManagement");
+    // gorp: ServiceManagement framework removed alongside the launch-at-login
+    // module — nothing in the codebase imports SMAppService anymore.
     println!("cargo:rerun-if-changed=src/platform/mac/objc/app.h");
     println!("cargo:rerun-if-changed=src/platform/mac/objc/app.m");
     println!("cargo:rerun-if-changed=src/platform/mac/objc/keycode.m");
