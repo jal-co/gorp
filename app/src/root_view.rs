@@ -1675,7 +1675,13 @@ impl RootView {
             workspace_setting,
         };
 
-        let auth_onboarding_state = if auth_state.is_logged_in() {
+        // gorp: in terminal-only mode we skip the entire auth/onboarding
+        // decision tree and go straight into the workspace. The upstream
+        // branches (sign-in, web import, pre-login onboarding) are kept in
+        // the binary but unreachable.
+        let auth_onboarding_state = if crate::terminal_only::is_enabled() {
+            AuthOnboardingState::Terminal(workspace_args.create_workspace(ctx))
+        } else if auth_state.is_logged_in() {
             AuthOnboardingState::Terminal(workspace_args.create_workspace(ctx))
         } else {
             cfg_if! {
@@ -3091,6 +3097,11 @@ impl RootView {
         auth_payload: AuthRedirectPayload,
         ctx: &mut ViewContext<Self>,
     ) {
+        // gorp: incoming auth redirects are unreachable in terminal-only mode
+        // (sign-in is removed, the gorp:// URL scheme has no auth handler).
+        if crate::terminal_only::is_enabled() {
+            return;
+        }
         self.auth_override_view.update(ctx, |modal, _| {
             modal.set_interrupted_auth_payload(auth_payload);
         });
@@ -3465,7 +3476,8 @@ impl AuthOnboardingState {
 
         let has_completed_local_onboarding = has_completed_local_onboarding(ctx);
 
-        if !is_onboarded
+        if !crate::terminal_only::is_enabled()
+            && !is_onboarded
             && !is_anonymous
             && !has_completed_local_onboarding
             && FeatureFlag::AgentOnboarding.is_enabled()
@@ -3490,6 +3502,10 @@ impl AuthOnboardingState {
     }
 
     fn try_open_onboarding_slides(&mut self, ctx: &mut ViewContext<RootView>) {
+        // gorp: onboarding is unreachable in terminal-only mode.
+        if crate::terminal_only::is_enabled() {
+            return;
+        }
         let target = match self {
             AuthOnboardingState::Auth(args) | AuthOnboardingState::ConfirmIncomingAuth(args) => {
                 AuthOnboardingTarget::Workspace(args.clone())

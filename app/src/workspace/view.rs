@@ -2164,6 +2164,13 @@ impl Workspace {
     }
 
     fn show_hoa_onboarding_flow(&mut self, ctx: &mut ViewContext<Self>) {
+        // gorp: HOA onboarding is unreachable in terminal-only mode.
+        // Still mark it completed so the one-time-modal model doesn't
+        // keep trying to reopen it on subsequent launches.
+        if crate::terminal_only::is_enabled() {
+            mark_hoa_onboarding_completed(ctx);
+            return;
+        }
         // Mark as completed immediately so the flow is never shown again,
         // even if the user quits mid-flow.
         mark_hoa_onboarding_completed(ctx);
@@ -6823,6 +6830,12 @@ impl Workspace {
     /// If the user is new and therefore has not seen the in app onboarding,
     /// triggers the welcome block to be shown after bootstrapping is completed.
     fn check_and_trigger_onboarding(&mut self, ctx: &mut ViewContext<Self>) -> bool {
+        // gorp: skip the entire welcome-block onboarding flow (legacy and
+        // agent variants) in terminal-only mode. Both branches below would
+        // otherwise fire OnboardingFlow actions and dispatch a telemetry banner.
+        if crate::terminal_only::is_enabled() {
+            return false;
+        }
         // Onboarding requires a real user to interact with it; suppress when
         // running in a headless mode like the SDK/CLI.
         if !AppExecutionMode::as_ref(ctx).can_show_onboarding() {

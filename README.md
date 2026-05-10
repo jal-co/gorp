@@ -14,13 +14,14 @@ Active surgical fork. The work is being done in small, reviewable PRs against
 | Branch | Status |
 |---|---|
 | `chore/disable-upstream-ci` | merged |
-| `chore/rebrand-gorp` | this PR |
-| `chore/remove-launch-at-login` | pending |
-| `chore/remove-auth-and-onboarding` | pending |
+| `chore/rebrand-gorp` | merged |
+| `chore/remove-launch-at-login` | merged |
+| `chore/remove-auth-and-onboarding` | this PR |
 | `chore/remove-telemetry` | pending (stub-out, not delete) |
 | `chore/remove-billing-and-drive` | pending |
 | `chore/remove-ai` | pending (the big one) |
 | `chore/remove-orphan-settings` | pending (cleanup pass) |
+| `chore/delete-dead-auth-code` | deferred (see [OPEN_ITEMS.md](OPEN_ITEMS.md)) |
 
 ## What's planned to go
 
