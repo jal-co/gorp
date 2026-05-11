@@ -91,6 +91,14 @@ impl TelemetryApi {
     // Batches up telemetry events from the global queue and sends a Message to the Rudderstack API.
     // Returns the number of events that were flushed.
     pub async fn flush_events(&self, settings_snapshot: PrivacySettingsSnapshot) -> Result<usize> {
+        // gorp: drain the queue and drop the events. Defensive even though the
+        // collector that calls us is also gated below — we don't want a
+        // future caller to accidentally trigger a Rudderstack request.
+        if crate::terminal_only::is_enabled() {
+            let events = warpui::telemetry::flush_events();
+            return Ok(events.len());
+        }
+
         let events = warpui::telemetry::flush_events();
         let event_count = events.len();
 
@@ -120,6 +128,17 @@ impl TelemetryApi {
         path: &Path,
         settings_snapshot: PrivacySettingsSnapshot,
     ) -> Result<()> {
+        // gorp: drop persisted events on disk without sending. We still touch
+        // the path so leftover files from a prior Warp install don't sit
+        // around forever.
+        if crate::terminal_only::is_enabled() {
+            if path.exists() {
+                let _ = std::fs::remove_file(path);
+            }
+            let _ = settings_snapshot;
+            return Ok(());
+        }
+
         if path.exists() {
             let file = File::open(path)?;
             let events: Vec<RudderBatchMessage> = serde_json::from_reader(file)?;
@@ -240,6 +259,15 @@ impl TelemetryApi {
         settings_snapshot: PrivacySettingsSnapshot,
     ) -> impl Future<Output = Result<()>> + '_ {
         let work = async move {
+            // gorp: every send path is a no-op. The compiled-in Rudderstack
+            // plumbing stays intact for the OPEN_ITEMS follow-up that
+            // physically removes the telemetry module.
+            if crate::terminal_only::is_enabled() {
+                let _ = event;
+                let _ = settings_snapshot;
+                return Result::Ok(());
+            }
+
             if settings_snapshot.should_disable_telemetry() {
                 log::info!("Not sending telemetry event because telemetry is disabled.");
                 return Result::Ok(());

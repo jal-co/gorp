@@ -58,6 +58,12 @@ pub enum EventPayload {
     },
 }
 
+// gorp: the three `record_*` methods below are dead in non-test builds
+// because their callers in `super` early-return before reaching them.
+// Suppress the dead-code warning instead of deleting them — they're the
+// real telemetry queue implementation, kept intact for the
+// `chore/delete-dead-telemetry-code` follow-up.
+#[cfg_attr(not(test), allow(dead_code))]
 impl EventStore {
     pub(super) fn new() -> Self {
         let initial_timestamp = get_current_time();
