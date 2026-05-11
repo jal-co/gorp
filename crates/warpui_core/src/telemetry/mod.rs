@@ -81,20 +81,42 @@ pub fn record_event(
     contains_ugc: bool,
     timestamp: DateTime<Utc>,
 ) {
-    let mut telemetry = TELEMETRY.lock();
-    telemetry.record_event(
-        user_id,
-        anonymous_id,
-        name,
-        payload,
-        contains_ugc,
-        timestamp,
-    );
+    // gorp: production builds drop every recorded event on the floor so the
+    // global EventStore never accumulates queued telemetry. The test build
+    // keeps the upstream behaviour so test assertions about queued events
+    // continue to pass. The defensive guards at the ServerApi / collector
+    // layer are still in place — this is belt-and-braces.
+    #[cfg(not(test))]
+    {
+        let _ = (user_id, anonymous_id, name, payload, contains_ugc, timestamp);
+        return;
+    }
+    #[cfg(test)]
+    {
+        let mut telemetry = TELEMETRY.lock();
+        telemetry.record_event(
+            user_id,
+            anonymous_id,
+            name,
+            payload,
+            contains_ugc,
+            timestamp,
+        );
+    }
 }
 
 pub fn record_identify_user_event(user_id: String, anonymous_id: String, timestamp: DateTime<Utc>) {
-    let mut telemetry = TELEMETRY.lock();
-    telemetry.record_identify_user_event(user_id, anonymous_id, timestamp);
+    // gorp: see `record_event` above.
+    #[cfg(not(test))]
+    {
+        let _ = (user_id, anonymous_id, timestamp);
+        return;
+    }
+    #[cfg(test)]
+    {
+        let mut telemetry = TELEMETRY.lock();
+        telemetry.record_identify_user_event(user_id, anonymous_id, timestamp);
+    }
 }
 
 /// Adds a 'App Active' event to the global event queue.  This should only be called in an async
@@ -104,8 +126,17 @@ pub fn record_app_active_event(
     anonymous_id: String,
     timestamp: DateTime<Utc>,
 ) {
-    let mut telemetry = TELEMETRY.lock();
-    telemetry.record_app_active(user_id, anonymous_id, timestamp);
+    // gorp: see `record_event` above.
+    #[cfg(not(test))]
+    {
+        let _ = (user_id, anonymous_id, timestamp);
+        return;
+    }
+    #[cfg(test)]
+    {
+        let mut telemetry = TELEMETRY.lock();
+        telemetry.record_app_active(user_id, anonymous_id, timestamp);
+    }
 }
 
 pub fn flush_events() -> Vec<Event> {

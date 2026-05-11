@@ -45,6 +45,15 @@ impl TelemetryCollector {
     }
 
     pub fn initialize_telemetry_collection(&self, ctx: &mut ModelContext<TelemetryCollector>) {
+        // gorp: skip every scheduled task this collector owns. Even though
+        // every individual send path is also stubbed at the ServerApi layer,
+        // we cut the schedules so the binary doesn't even wake up background
+        // tasks (active-usage timer, queue flush timer, persisted-event
+        // flush) when running in terminal-only mode.
+        if crate::terminal_only::is_enabled() {
+            return;
+        }
+
         // Start a background thread to periodically flush events from the telemetry event queue.
         if ChannelState::is_release_bundle() || FeatureFlag::WithSandboxTelemetry.is_enabled() {
             // Flush the events to Rudderstack that were persisted into a file the last time the app was

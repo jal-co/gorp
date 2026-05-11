@@ -50,4 +50,56 @@ When we revisit:
 
 Estimated diff once collapsed: ~5\u201310k LOC removed.
 
+## chore/delete-dead-telemetry-code
+
+**Status:** deferred from `chore/remove-telemetry`
+**Trigger to revisit:** any time after `chore/remove-ai` and
+`chore/remove-billing-and-drive` land. This one has no dependency on
+other branches but is the kind of cleanup that's easier when there's
+less surface area.
+
+The `chore/remove-telemetry` branch took the (Q3=c) stub-out path:
+three defensive guards at the network/disk send sites, one guard on
+the collector's scheduler, plus a `cfg(not(test))` no-op on the three
+`record_*` functions in `crates/warpui_core/src/telemetry/mod.rs`. The
+upstream telemetry plumbing stays in tree.
+
+What is still in the binary as dead-but-compiled code:
+
+- `app/src/server/telemetry/` (entire module — ~9k LOC including the
+  7k-line `events.rs` `TelemetryEvent` enum, `collector.rs`,
+  `rudder_message.rs`, `secret_redaction.rs`, `context_provider.rs`,
+  the `mod_tests`, `events_tests`, `secret_redaction_tests` files).
+- `crates/warpui_core/src/telemetry/` (the `EventStore` and macros;
+  also accessed by non-telemetry code as a recording sink, so this
+  is the more sensitive one to remove).
+- `crates/warpui_core/src/app_focus_telemetry.rs` (still gets called
+  on every app focus/blur transition, just doesn't enqueue).
+- Every `send_telemetry_*!` macro call site throughout the codebase
+  (∼1k+ call sites; the macro bodies expand to inert code in this
+  fork but they still bloat the compiled output).
+- `app/src/server/telemetry/macros.rs` (the macros themselves; can be
+  replaced with empty-body equivalents when the upstream is removed).
+
+When we revisit:
+
+1. Decide whether to also drop the per-event-type variants from
+   `TelemetryEvent` enum. Many of them describe AI / cloud features
+   that will already be gone by then; the remainder describe core
+   terminal operations and could be repurposed as a local telemetry
+   sink if we ever want one.
+2. Delete `app/src/server/telemetry/` directory.
+3. Delete `crates/warpui_core/src/telemetry/` and
+   `crates/warpui_core/src/app_focus_telemetry.rs`.
+4. Replace every `send_telemetry_*!(...)` macro invocation with an
+   empty stub (or remove the call entirely if surrounding code can be
+   simplified along with it).
+5. Drop the `mod telemetry;` declarations in `app/src/server/mod.rs`
+   and `crates/warpui_core/src/lib.rs`.
+6. Remove the `telemetry_config` field from `ChannelConfig` if no
+   consumers remain.
+
+Estimated diff once collapsed: ~10–15k LOC removed, plus a measurable
+binary-size drop.
+
 ## (Add new entries above this line)

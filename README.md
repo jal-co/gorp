@@ -16,12 +16,13 @@ Active surgical fork. The work is being done in small, reviewable PRs against
 | `chore/disable-upstream-ci` | merged |
 | `chore/rebrand-gorp` | merged |
 | `chore/remove-launch-at-login` | merged |
-| `chore/remove-auth-and-onboarding` | this PR |
-| `chore/remove-telemetry` | pending (stub-out, not delete) |
+| `chore/remove-auth-and-onboarding` | merged |
+| `chore/remove-telemetry` | this PR (stub-out, not delete) |
 | `chore/remove-billing-and-drive` | pending |
 | `chore/remove-ai` | pending (the big one) |
 | `chore/remove-orphan-settings` | pending (cleanup pass) |
 | `chore/delete-dead-auth-code` | deferred (see [OPEN_ITEMS.md](OPEN_ITEMS.md)) |
+| `chore/delete-dead-telemetry-code` | deferred (see [OPEN_ITEMS.md](OPEN_ITEMS.md)) |
 
 ## What's planned to go
 
