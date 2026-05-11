@@ -102,4 +102,74 @@ When we revisit:
 Estimated diff once collapsed: ~10–15k LOC removed, plus a measurable
 binary-size drop.
 
+## chore/delete-dead-drive-code
+
+**Status:** deferred from `chore/remove-billing-and-drive`
+**Trigger to revisit:** after `chore/remove-ai` lands. Same logic as the
+dead-auth follow-up — the 48 callers of `crate::drive::*` are mostly
+in AI / cloud / cloud-object code that's about to disappear.
+
+The `chore/remove-billing-and-drive` branch took the (Q-split=C)
+path agreed in planning:
+
+- **Billing was deleted** — only one consumer (a per-team
+  "shared-objects-creation-denied" modal that never fires in
+  terminal-only mode); replaced with a stub no-op method that keeps
+  upstream callsites compiling.
+- **WarpDrive UI was hidden** — left-panel tab dropped from
+  `Workspace::compute_left_panel_views`, the top-level **Drive** menu
+  is no longer added to the menu bar, and the **View → Toggle Warp
+  Drive** item is skipped.
+- **`crate::drive::workflows` was moved** to `crate::workflows::runner`
+  so the workflow-runner UI (which is a kept feature) doesn't live
+  inside a module tree about to be deleted. 6 importers were rerouted.
+- **`app/src/drive/` itself stays in tree** as dead-but-compiled code.
+
+What is still in the binary as dead-but-compiled code:
+
+- `app/src/drive/` minus `workflows/` (entire module — ~20k LOC
+  including `panel.rs`, `index.rs`, `sharing/`, `import/`, `export.rs`,
+  `items/`, `folders/`, `cloud_object_styling.rs`,
+  `cloud_object_naming_dialog.rs`, `cloud_action_confirmation_dialog.rs`,
+  `empty_trash_confirmation_dialog.rs`, `drive_helpers.rs`, `settings.rs`)
+- `DrivePanel` is still constructed in `LeftPanelView::new` (cheap
+  empty handle) so the upstream type stays valid as a `ViewHandle`
+  field everywhere it's referenced.
+- `crate::workflows::runner::ai_assist` will go with `chore/remove-ai`,
+  not this branch (it's AI-shaped, not drive-shaped).
+- 48 cross-module callers of `crate::drive::*` for cloud-object,
+  persistence, telemetry, URI handler, and search integration paths.
+  Most of them flow through AI or cloud-objects modules that
+  `chore/remove-ai` will also gut, so the surface should collapse
+  naturally before we attempt the physical delete.
+- The `is_shared_objects_creation_denied_modal_open` bool stays in
+  `WorkspaceState` (it's part of upstream's modal-tracking API used
+  by `close_all_modals` / `is_any_non_palette_modal_open`); it's just
+  never set to `true` in this fork.
+
+When we revisit:
+
+1. Confirm `chore/remove-ai` (and any later cloud-objects branch)
+   collapsed the 48 callers down to a manageable number.
+2. Drop `app/src/drive/` directory.
+3. Drop `mod drive;` and the `pub use index::DriveIndexVariant;` /
+   `pub use panel::{DrivePanel, DrivePanelEvent};` re-exports.
+4. Replace the `ViewHandle<DrivePanel>` field in `LeftPanelView` with
+   a unit-typed placeholder or remove the field entirely.
+5. Delete or move the `WarpDriveSettings`, `WarpDriveSource`,
+   `OpenWarpDriveObjectSettings`, `OpenWarpDriveObjectArgs`,
+   `CloudObjectTypeAndId`, `DriveObjectType` types that the rest of
+   the codebase still references.
+6. Sweep the URI handler in `app/src/uri/mod.rs` of
+   `drive::OpenWarpDriveObjectSettings` and related drive-URL parsing.
+7. Sweep `app/src/server/telemetry/events.rs` of all
+   `WarpDrive*` telemetry event variants (they'll be inert by then
+   per the `chore/remove-telemetry` branch's stubs, but removing
+   them shrinks the enum).
+8. Remove the `is_shared_objects_creation_denied_modal_open` field
+   from `WorkspaceState` once all consumers are gone (and
+   `open_shared_objects_creation_denied_modal` along with it).
+
+Estimated diff once collapsed: ~25–30k LOC removed.
+
 ## (Add new entries above this line)

@@ -18,7 +18,7 @@ use warpui::{
 };
 
 use crate::{
-    drive::workflows::{
+    workflows::runner::{
         workflow_arg_selector::{WorkflowArgSelector, WorkflowArgSelectorStyles},
         workflow_arg_type_helpers::{self, ArgumentTypeEditor},
     },

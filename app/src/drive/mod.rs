@@ -11,7 +11,10 @@ pub mod items;
 pub mod panel;
 pub mod settings;
 pub mod sharing;
-pub mod workflows;
+// gorp: `drive::workflows` was moved out of the drive subtree to
+// `crate::workflows::runner` because the workflow runner UI is a kept
+// feature even though the rest of Warp Drive is unreachable.
+// See app/src/workflows/mod.rs.
 
 use std::{cmp::Ordering, fmt};
 

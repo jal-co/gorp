@@ -218,9 +218,10 @@ use repo_metadata::RemoteRepositoryIdentifier;
 #[cfg(target_family = "wasm")]
 use url::Url;
 
-use crate::billing::shared_objects_creation_denied_modal::{
-    SharedObjectsCreationDeniedModal, SharedObjectsCreationDeniedModalEvent,
-};
+// gorp: billing module deleted; the SharedObjectsCreationDenied modal
+// went with it. Callers of `open_shared_objects_creation_denied_modal`
+// (the per-team-capacity gate on shared-workflow creation) early-return
+// without doing anything in this fork.
 
 #[cfg(target_family = "wasm")]
 use crate::wasm_nux_dialog::WasmNUXDialog;
@@ -247,8 +248,8 @@ use crate::cloud_object::{
 };
 use crate::context_chips::ChipRuntimeCapabilities;
 use crate::drive::import::modal::{ImportModal, ImportModalEvent};
-use crate::drive::workflows::arguments::ArgumentsState;
-use crate::drive::workflows::modal::{WorkflowModal, WorkflowModalEvent};
+use crate::workflows::runner::arguments::ArgumentsState;
+use crate::workflows::runner::modal::{WorkflowModal, WorkflowModalEvent};
 use crate::drive::{
     CloudObjectTypeAndId, DriveObjectType, DrivePanel, DrivePanelEvent, OpenWarpDriveObjectSettings,
 };
@@ -298,7 +299,7 @@ use crate::server::server_api::{ServerApi, ServerApiEvent, ServerApiProvider, Se
 use crate::server::telemetry::{
     AddTabWithShellSource, AnonymousUserSignupEntrypoint, CloseTarget, EnvVarTelemetryMetadata,
     FileTreeSource, KnowledgePaneEntrypoint, LaunchConfigUiLocation,
-    MCPServerCollectionPaneEntrypoint, OpenedWarpAISource, SharingDialogSource, TierLimitHitEvent,
+    MCPServerCollectionPaneEntrypoint, OpenedWarpAISource, SharingDialogSource,
     WarpDriveSource,
 };
 use crate::session_management::{SessionNavigationData, SessionSource, TabNavigationData};
@@ -1018,7 +1019,8 @@ pub struct Workspace {
     tab_bar_pinned_by_popup: bool,
     user_menu: ViewHandle<Menu<WorkspaceAction>>,
     native_modal: ViewHandle<NativeModal>,
-    shared_objects_creation_denied_modal: ViewHandle<SharedObjectsCreationDeniedModal>,
+    // gorp: shared_objects_creation_denied_modal removed along with the
+    // billing module.
     shown_staging_banner_count: u32,
 
     // When user's open WEB for the first time, we ask them to select a preference of
@@ -3012,24 +3014,7 @@ impl Workspace {
 
         let native_modal = Self::build_native_modal_view(ctx);
 
-        let shared_objects_creation_denied_modal =
-            ctx.add_typed_action_view(|ctx| SharedObjectsCreationDeniedModal::new(None, ctx));
-        ctx.subscribe_to_view(
-            &shared_objects_creation_denied_modal,
-            |me, _, event, ctx| match event {
-                SharedObjectsCreationDeniedModalEvent::Close => {
-                    me.current_workspace_state
-                        .is_shared_objects_creation_denied_modal_open = false;
-                    ctx.notify();
-                }
-                SharedObjectsCreationDeniedModalEvent::TeamSettings => {
-                    me.show_settings_with_section(Some(SettingsSection::Teams), ctx);
-                    me.current_workspace_state
-                        .is_shared_objects_creation_denied_modal_open = false;
-                    ctx.notify();
-                }
-            },
-        );
+        // gorp: shared_objects_creation_denied_modal removed.
 
         ctx.subscribe_to_model(&AISettings::handle(ctx), |me, _, event, ctx| match event {
             AISettingsChangedEvent::IsAnyAIEnabled { .. }
@@ -3165,7 +3150,6 @@ impl Workspace {
             tab_bar_pinned_by_popup: false,
             user_menu,
             native_modal,
-            shared_objects_creation_denied_modal,
             file_upload_sessions: Default::default(),
             ai_fact_view,
             left_panel_open: false,
@@ -15033,8 +15017,10 @@ impl Workspace {
             DrivePanelEvent::FocusWarpDrive => {
                 ctx.focus(&self.left_panel_view);
             }
-            DrivePanelEvent::OpenSharedObjectsCreationDeniedModal(object_type, team_uid) => {
-                self.open_shared_objects_creation_denied_modal(*object_type, *team_uid, ctx)
+            DrivePanelEvent::OpenSharedObjectsCreationDeniedModal(_object_type, _team_uid) => {
+                // gorp: billing modal removed; this event never fires in
+                // terminal-only mode because the Drive UI that emits it is
+                // unreachable.
             }
             DrivePanelEvent::AttachPlanAsContext(id) => {
                 self.attach_plan_as_context(*id, ctx);
@@ -16859,50 +16845,18 @@ impl Workspace {
         ctx.notify();
     }
 
+    /// gorp: shared-objects-creation-denied modal is gone along with the
+    /// billing module. Signature kept so the two callers below
+    /// (`DrivePanelEvent::OpenSharedObjectsCreationDeniedModal` and the
+    /// team-capacity check in `open_workflow_modal`) still type-check
+    /// without rewriting them. Neither path is reachable in terminal-only
+    /// mode anyway — the Drive UI is hidden and there are no teams.
     fn open_shared_objects_creation_denied_modal(
         &mut self,
-        object_type: DriveObjectType,
-        team_uid: ServerId,
-        ctx: &mut ViewContext<Self>,
+        _object_type: DriveObjectType,
+        _team_uid: ServerId,
+        _ctx: &mut ViewContext<Self>,
     ) {
-        let team = UserWorkspaces::as_ref(ctx).team_from_uid(team_uid);
-        if let Some(team) = team {
-            let current_user_email = self.auth_state.user_email().unwrap_or_default();
-            let has_admin_permissions = team.has_admin_permissions(&current_user_email);
-            let team_uid = team.uid;
-            let is_delinquent_due_to_payment_issue =
-                team.billing_metadata.is_delinquent_due_to_payment_issue();
-            let customer_type = team.billing_metadata.customer_type;
-
-            // Send telemetry event only if the team is not delinquent. If the team is
-            // delinquent, then they haven't technically hit any tier limits are just in a
-            // restricted state.
-            if !is_delinquent_due_to_payment_issue {
-                send_telemetry_from_ctx!(
-                    TelemetryEvent::TierLimitHit(TierLimitHitEvent {
-                        team_uid: team.uid,
-                        feature: object_type.to_string(),
-                    }),
-                    ctx
-                );
-            }
-
-            self.current_workspace_state
-                .is_shared_objects_creation_denied_modal_open = true;
-            self.shared_objects_creation_denied_modal
-                .update(ctx, |modal, ctx| {
-                    modal.update_modal_state(
-                        team_uid,
-                        object_type,
-                        has_admin_permissions,
-                        is_delinquent_due_to_payment_issue,
-                        customer_type,
-                        ctx,
-                    );
-                });
-            ctx.focus(&self.shared_objects_creation_denied_modal);
-            ctx.notify();
-        }
     }
 
     /// Opens the workflow modal in the provided space and folder with no existing content (i.e. a new workflow modal).
@@ -20290,7 +20244,11 @@ impl Workspace {
                 entry_focus: GlobalSearchEntryFocus::Results,
             });
         }
-        if WarpDriveSettings::is_warp_drive_enabled(ctx) {
+        // gorp: WarpDrive left-panel tab is hidden in terminal-only mode.
+        // The DrivePanel view itself is still constructed in the workspace
+        // ctor (so the unreachable code path still compiles), but it's
+        // never offered to the user as a left-panel tab.
+        if !crate::terminal_only::is_enabled() && WarpDriveSettings::is_warp_drive_enabled(ctx) {
             views.push(ToolPanelView::WarpDrive);
         }
         views
@@ -23161,12 +23119,11 @@ impl View for Workspace {
             stack.add_child(ChildView::new(&self.theme_deletion_modal).finish());
         }
 
-        if self
-            .current_workspace_state
-            .is_shared_objects_creation_denied_modal_open
-        {
-            stack.add_child(ChildView::new(&self.shared_objects_creation_denied_modal).finish());
-        }
+        // gorp: shared-objects-creation-denied modal is gone along with the
+        // billing module. The bool stays in WorkspaceState for now (so
+        // close_all_modals / is_any_non_palette_modal_open keep working
+        // against upstream's API) but is never set to true.
+
 
         if self.current_workspace_state.is_reward_modal_open {
             stack.add_child(Clipped::new(ChildView::new(&self.reward_modal).finish()).finish());

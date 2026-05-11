@@ -11,7 +11,9 @@ mod app_state;
 mod auth;
 mod autoupdate;
 mod banner;
-mod billing;
+// gorp: `mod billing;` removed — the only consumer was a per-team
+// "shared objects creation denied" modal which never fires in
+// terminal-only mode (no teams, no cloud-object creation path).
 mod changelog_model;
 mod chip_configurator;
 mod cloud_object;
@@ -1556,7 +1558,9 @@ pub(crate) fn initialize_app(
     prompt::editor_modal::init(ctx);
     ai::blocklist::agent_view::editor::init(ctx);
     undo_close::init(ctx);
-    billing::shared_objects_creation_denied_modal::init(ctx);
+    // gorp: `billing::shared_objects_creation_denied_modal::init` removed
+    // along with the billing module.
+
     tab_configs::new_worktree_modal::init(ctx);
     tab_configs::params_modal::init(ctx);
     ai::blocklist::init(ctx);
