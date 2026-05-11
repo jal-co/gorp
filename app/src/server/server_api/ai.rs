@@ -52,7 +52,7 @@ use crate::{
         execution_context::WarpAiExecutionContext, requests::GenerateDialogueResult,
         utils::TranscriptPart, AIGeneratedCommand, GenerateCommandsFromNaturalLanguageError,
     },
-    drive::workflows::ai_assist::{GeneratedCommandMetadata, GeneratedCommandMetadataError},
+    workflows::runner::ai_assist::{GeneratedCommandMetadata, GeneratedCommandMetadataError},
     server::graphql::{
         default_request_options, get_request_context, get_user_facing_error_message,
     },

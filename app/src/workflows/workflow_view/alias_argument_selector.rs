@@ -11,7 +11,7 @@ use warpui::{
 
 use crate::{
     cloud_object::model::persistence::CloudModel,
-    drive::workflows::enum_creation_dialog::WorkflowEnumData,
+    workflows::runner::enum_creation_dialog::WorkflowEnumData,
     editor::{
         EditOrigin, EditorView, Event as EditorEvent, PropagateAndNoOpNavigationKeys,
         SingleLineEditorOptions, TextOptions,

@@ -15,6 +15,11 @@ pub mod export_workflow;
 pub mod info_box;
 pub mod local_workflows;
 pub mod manager;
+// gorp: moved from `crate::drive::workflows` so the runner UI doesn't
+// live under a module tree that will be physically removed in the
+// chore/delete-dead-drive-code follow-up. The contents are unchanged;
+// only the path differs.
+pub mod runner;
 pub mod workflow;
 pub mod workflow_enum;
 pub mod workflow_view;

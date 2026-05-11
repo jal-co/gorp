@@ -17,12 +17,13 @@ Active surgical fork. The work is being done in small, reviewable PRs against
 | `chore/rebrand-gorp` | merged |
 | `chore/remove-launch-at-login` | merged |
 | `chore/remove-auth-and-onboarding` | merged |
-| `chore/remove-telemetry` | this PR (stub-out, not delete) |
-| `chore/remove-billing-and-drive` | pending |
+| `chore/remove-telemetry` | merged (stub-out, not delete) |
+| `chore/remove-billing-and-drive` | this PR (split: billing deleted, drive hidden) |
 | `chore/remove-ai` | pending (the big one) |
 | `chore/remove-orphan-settings` | pending (cleanup pass) |
 | `chore/delete-dead-auth-code` | deferred (see [OPEN_ITEMS.md](OPEN_ITEMS.md)) |
 | `chore/delete-dead-telemetry-code` | deferred (see [OPEN_ITEMS.md](OPEN_ITEMS.md)) |
+| `chore/delete-dead-drive-code` | deferred (see [OPEN_ITEMS.md](OPEN_ITEMS.md)) |
 
 ## What's planned to go
 

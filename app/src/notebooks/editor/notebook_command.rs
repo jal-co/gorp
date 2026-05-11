@@ -44,7 +44,7 @@ use crate::{
     appearance::Appearance,
     completer::SessionAgnosticContext,
     debounce::debounce,
-    drive::workflows::arguments::ArgumentsState,
+    workflows::runner::arguments::ArgumentsState,
     editor::InteractionState,
     features::FeatureFlag,
     menu::MenuItemFields,
